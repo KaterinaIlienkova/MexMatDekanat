@@ -3,7 +3,7 @@ from telegram import Update, KeyboardButton, ReplyKeyboardMarkup
 from telegram.ext import CallbackContext
 from sqlalchemy.orm import Session
 
-
+from source.config import WAITING_FOR_USER_ROLE
 from source.database import SessionLocal
 from sqlalchemy import text
 from typing import Any, Optional

@@ -7,8 +7,6 @@ from telegram import Update
 from telegram.ext import CallbackContext
 from source.models import User, Student, Teacher
 from source.database import SessionLocal
-from aiogram.types import Message
-from aiogram.fsm.context import FSMContext
 
 logger = logging.getLogger(__name__)
 
@@ -112,4 +110,50 @@ def get_chat_ids_by_departments(session: Session, department_ids: list[int]) -> 
     except Exception as e:
         logger.exception(f"Помилка при отриманні ChatID за кафедрами: {e}")
         return []
+
+
+from sqlalchemy.exc import IntegrityError
+
+async def save_new_user(update: Update, context: CallbackContext):
+    """Зберігає нового користувача в базі даних."""
+    with SessionLocal() as db:
+        try:
+            user = User(
+                UserName=context.user_data["new_user_name"],
+                TelegramTag=context.user_data["new_telegram_tag"],
+                Role=context.user_data["new_role"],
+                PhoneNumber=context.user_data["new_phone"]
+            )
+            db.add(user)
+            db.commit()
+            db.refresh(user)
+
+            if user.Role == "student":
+                student = Student(
+                    UserID=user.UserID,
+                    GroupID=context.user_data["new_group"],
+                    AdmissionYear=context.user_data["new_admission_year"]
+                )
+                db.add(student)
+
+            elif user.Role == "teacher":
+                teacher = Teacher(
+                    UserID=user.UserID,
+                    DepartmentID=context.user_data["new_department"]
+                )
+                db.add(teacher)
+
+            db.commit()
+
+            await update.message.reply_text(f"✅ Користувач {user.UserName} ({user.TelegramTag}) успішно доданий як {user.Role}!")
+
+        except IntegrityError:
+            db.rollback()
+            await update.message.reply_text("❌ Помилка: Користувач з таким TelegramTag вже існує!")
+        except Exception as e:
+            db.rollback()
+            await update.message.reply_text(f"❌ Виникла помилка: {str(e)}")
+
+    # Очищення стану
+    context.user_data.clear()
 
