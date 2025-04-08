@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, Enum, BigInteger, Text, TIMESTAMP
+from sqlalchemy import Column, Integer, String, ForeignKey, Enum, BigInteger, Text, TIMESTAMP, Boolean
 from sqlalchemy.orm import relationship, declarative_base
 from source.database import Base
 
@@ -11,6 +11,8 @@ class User(Base):
     Role = Column(Enum('student', 'teacher', 'dean_office'), nullable=False)
     PhoneNumber = Column(String(15), nullable=True)
     ChatID = Column(BigInteger, nullable=True)
+    IsConfirmed = Column(Boolean, default=False)
+
 
     students = relationship("Student", back_populates="user", uselist=False)
     teachers = relationship("Teacher", back_populates="user", uselist=False)

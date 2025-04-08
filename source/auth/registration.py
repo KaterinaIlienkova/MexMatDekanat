@@ -1,9 +1,9 @@
 from sqlalchemy.exc import SQLAlchemyError
-from telegram import Update, KeyboardButton, ReplyKeyboardMarkup
-from telegram.ext import CallbackContext
+from telegram import Update, KeyboardButton, ReplyKeyboardMarkup, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import CallbackContext, CallbackQueryHandler
 from sqlalchemy.orm import Session
 
-from source.config import WAITING_FOR_USER_ROLE
+from source.config import WAITING_FOR_USER_ROLE, WAITING_FOR_USER_DETAILS, WAITING_FOR_STUDENT_DETAILS
 from source.database import SessionLocal
 from sqlalchemy import text
 from typing import Any, Optional
@@ -14,19 +14,38 @@ logger = logging.getLogger(__name__)
 
 from source.models import Student, StudentGroup, Department, Teacher, User
 
-async def check_registration(update: Update, context: CallbackContext) -> Any | None:
-    """Перевіряє, чи зареєстрований користувач, і повертає його роль"""
+async def check_registration(update: Update, context: CallbackContext) -> Optional[str]:
     with SessionLocal() as db:
-        telegram_tag = update.message.from_user.username
+        user = update.message.from_user
+        telegram_tag = user.username
         chat_id = update.effective_chat.id
+
         if telegram_tag:
             update_chat_id(db, telegram_tag, chat_id)
-        role = get_user_role(db, telegram_tag)
-        if role == "Невідомий":
-            await update.message.reply_text("Ви не зареєстровані. "
-                                            "Будь ласка, зверніться до працівника деканату.")
+        else:
+            await update.message.reply_text("❌ У вашому профілі Telegram відсутнє ім'я користувача. Будь ласка, встановіть його в налаштуваннях Telegram.")
             return None
-        return role
+
+        existing_user = db.query(User).filter_by(TelegramTag=telegram_tag).first()
+        if not existing_user:
+            context.user_data["state"] = WAITING_FOR_STUDENT_DETAILS
+            context.user_data["new_telegram_tag"] = telegram_tag
+            context.user_data["new_chat_id"] = chat_id
+            context.user_data["new_role"] = "student"
+            await update.message.reply_text(
+                "🔒 Ви не зареєстровані.\n"
+                "Будь ласка, надайте додаткові дані для завершення реєстрації.\n\n"
+                "✏️ Введіть ваше ім'я, номер телефону, групу, рік вступу та спеціальність через кому.\n\n"
+                "📌 Приклад:\n"
+                "Іван Петренко, +380961234567, ФІ-21, 2023, Комп'ютерні науки"
+            )
+            return None
+        elif not existing_user.IsConfirmed:
+            await update.message.reply_text("⏳ Ваша заявка на реєстрацію ще не підтверджена працівником деканату.")
+            return None
+        return existing_user.Role
+
+
 
 def get_user_role(session: Session, telegram_tag: str) -> str:
     """Отримує роль користувача за TelegramTag."""
@@ -61,7 +80,7 @@ async def start(update: Update, context: CallbackContext):
 
     if role == "dean_office":
         keyboard = [[KeyboardButton("Інструкції"), KeyboardButton("Додати користувача"),
-                     KeyboardButton("Редагувати Q&A"), KeyboardButton("Оголошення")]]
+                     KeyboardButton("Редагувати Q&A"), KeyboardButton("Оголошення"), KeyboardButton("Підтвердити реєстрацію")]]
     elif role == "student":
         keyboard = [[KeyboardButton("Q&A")]]  # Q&A на панельці для студентів
     else:
@@ -93,7 +112,8 @@ def add_user(session: Session, username: str, telegram_tag: str, role: str, phon
         TelegramTag=telegram_tag,
         Role=role,
         PhoneNumber=phone_number,
-        ChatID=chat_id
+        ChatID=chat_id,
+        IsConfirmed=False  # Нові користувачі подають заявку
     )
 
     session.add(user)
@@ -130,6 +150,7 @@ def add_user(session: Session, username: str, telegram_tag: str, role: str, phon
 
     session.commit()
     return user
+
 
 
 def add_student(session: Session, user_id: int, group_name: str, admission_year: int, specialty_name: Optional[str] = None) -> bool:
@@ -217,7 +238,7 @@ async def save_new_user(update: Update, context: CallbackContext):
     """Зберігає нового користувача в БД через ORM."""
     with SessionLocal() as db:
         user = add_user(db, context.user_data["new_user_name"], context.user_data["new_telegram_tag"],
-                        context.user_data["new_role"], context.user_data["new_phone"])
+                        context.user_data["new_role"], context.user_data["new_phone"],context.user_data["new_chat_id"])
         if user is None:
             await update.message.reply_text("❌ Користувач із таким TelegramTag вже існує.")
             return
@@ -232,7 +253,7 @@ async def save_new_user(update: Update, context: CallbackContext):
             success = add_teacher(db, user.UserID, context.user_data["new_email"], context.user_data["new_department"])
 
         if success:
-            await update.message.reply_text(f"✅ Користувач {user.UserName} (@{user.TelegramTag}) успішно доданий як {role}!")
+            await update.message.reply_text(f"✅ Дані збережено!")
         else:
             await update.message.reply_text(f"❌ Помилка при додаванні {role}.")
 
@@ -241,3 +262,109 @@ async def save_new_user(update: Update, context: CallbackContext):
 async def prompt_user_details(update: Update, context: CallbackContext):
     context.user_data["state"] = WAITING_FOR_USER_ROLE  # Перевірте, що цей рядок є у функції
     await update.message.reply_text("Виберіть роль нового користувача: student або teacher")
+
+def confirm_user(session: Session, telegram_tag: str) -> bool:
+    user = session.query(User).filter_by(TelegramTag=telegram_tag).first()
+    if user and not user.IsConfirmed:
+        user.IsConfirmed = True
+        session.commit()
+        return True
+    return False
+
+
+async def confirm_command(update: Update, context: CallbackContext):
+    if not context.args:
+        await update.message.reply_text("Використання: /confirm telegram_tag")
+        return
+    telegram_tag = context.args[0]
+    with SessionLocal() as db:
+        if confirm_user(db, telegram_tag):
+            await update.message.reply_text(f"✅ Користувача @{telegram_tag} підтверджено.")
+        else:
+            await update.message.reply_text(f"❌ Не вдалося підтвердити @{telegram_tag}.")
+
+
+async def confirm(update: Update, context: CallbackContext) -> None:
+    """Показує всіх неверифікованих студентів для підтвердження"""
+    # Отримання всіх неверифікованих студентів
+    with SessionLocal() as db:
+        unconfirmed_users = db.query(User).filter_by(IsConfirmed=False, Role='student').all()
+
+        if not unconfirmed_users:
+            await update.message.reply_text("Немає неверифікованих студентів на даний момент.")
+            return
+
+        # Створюємо повідомлення зі списком усіх заявок
+        message_text = "📋 Список заявок на підтвердження:\n\n"
+
+        for i, user in enumerate(unconfirmed_users, 1):
+            # Додаємо базову інформацію про користувача
+            message_text += f"#{i} - {user.UserName} (@{user.TelegramTag})\n"
+            message_text += f"📱 Телефон: {user.PhoneNumber or 'Не вказано'}\n"
+
+            # Додаємо інформацію про студента
+            student = db.query(Student).filter_by(UserID=user.UserID).first()
+            if student:
+                group = db.query(StudentGroup).filter_by(GroupID=student.GroupID).first()
+                group_name = group.GroupName if group else "Невідома"
+                message_text += f"👨‍🎓 Група: {group_name}\n"
+                message_text += f"📅 Рік вступу: {student.AdmissionYear}\n"
+
+            message_text += "\n"
+
+        # Створюємо клавіатуру з номерами заявок
+        keyboard = []
+        row = []
+
+        for i, user in enumerate(unconfirmed_users, 1):
+            # Створюємо кнопки по 3 в ряд
+            button = InlineKeyboardButton(f"#{i}", callback_data=f"confirm_{user.TelegramTag}")
+            row.append(button)
+
+            if len(row) == 3 or i == len(unconfirmed_users):
+                keyboard.append(row)
+                row = []
+
+        # Додаємо кнопку скасування
+        keyboard.append([InlineKeyboardButton("Скасувати", callback_data="cancel_confirmation")])
+
+        reply_markup = InlineKeyboardMarkup(keyboard)
+
+        await update.message.reply_text(
+            message_text + "Натисніть на номер заявки, щоб підтвердити реєстрацію:",
+            reply_markup=reply_markup
+        )
+async def confirm_callback_handler(update: Update, context: CallbackContext) -> None:
+    """Обробляє натискання кнопок підтвердження користувачів"""
+    query = update.callback_query
+    logging.info(f"confirm_callback_handler отримав запит: {query.data}")
+    await query.answer()
+    logging.info(f"Отримано callback-запит: {query.data}")
+
+    if query.data == "cancel_confirmation":
+        await query.edit_message_text("Операцію скасовано.")
+        return
+
+    # Отримуємо telegram_tag користувача
+    telegram_tag = query.data.replace("confirm_", "")
+
+    # Підтверджуємо користувача
+    with SessionLocal() as db:
+        if confirm_user(db, telegram_tag):
+            # Отримуємо ім'я користувача для повідомлення
+            user = db.query(User).filter_by(TelegramTag=telegram_tag).first()
+            username = user.UserName if user else telegram_tag
+
+            await query.edit_message_text(f"✅ Користувача {username} (@{telegram_tag}) успішно підтверджено.")
+
+            # Надсилаємо повідомлення користувачу про підтвердження реєстрації
+            if user and user.ChatID:
+                try:
+                    await context.bot.send_message(
+                        chat_id=user.ChatID,
+                        text="✅ Вашу реєстрацію було підтверджено адміністратором. Тепер ви можете користуватися всіма функціями системи."
+                    )
+                except Exception as e:
+                    logging.error(f"Помилка відправки повідомлення користувачу: {e}")
+        else:
+            await query.edit_message_text(f"❌ Не вдалося підтвердити користувача @{telegram_tag}.")

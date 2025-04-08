@@ -1,6 +1,7 @@
 from telegram import Update
 from telegram.ext import CallbackContext
 
+from source.auth.registration import confirm
 from source.faq.handlers import send_qa, show_edit_qa_options
 from source.announcements.publication import sent_publication
 
@@ -23,3 +24,5 @@ async def handle_button_click(update: Update, context: CallbackContext):
         await show_edit_qa_options(update, context)  # Опції редагування Q&A
     elif text == "Оголошення":
         await sent_publication(update, context)  # Ініціювання публікації оголошення
+    elif text == "Підтвердити реєстрацію":
+        await confirm(update, context)  # Ініціювання публікації оголошення
