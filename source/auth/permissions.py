@@ -2,6 +2,7 @@ from telegram import Update
 from telegram.ext import CallbackContext
 
 from source.auth.registration import confirm
+from source.courses.handlers import view_courses_by_student, view_students
 from source.faq.handlers import send_qa, show_edit_qa_options
 from source.announcements.publication import sent_publication
 
@@ -26,3 +27,7 @@ async def handle_button_click(update: Update, context: CallbackContext):
         await sent_publication(update, context)  # Ініціювання публікації оголошення
     elif text == "Підтвердити реєстрацію":
         await confirm(update, context)  # Ініціювання публікації оголошення
+    elif text == "Мої поточні курси":
+        await view_courses_by_student(update, context)  # Ініціювання публікації оголошення
+    elif text == "Списки студентів":
+        await view_students(update, context)  # Ініціювання публікації оголошення

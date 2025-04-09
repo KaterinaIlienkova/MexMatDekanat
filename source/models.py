@@ -83,12 +83,22 @@ class Course(Base):
     StudyPlatform = Column(String(100), nullable=True)
     MeetingLink = Column(String(255), nullable=True)
     TeacherID = Column(Integer, ForeignKey('teachers.TeacherID'))
+    IsActive = Column(Boolean, default=True)
 
-class CourseStudentGroup(Base):
-    __tablename__ = 'coursestudentgroups'
+    teacher = relationship("Teacher", backref="courses")  # Відношення до викладача
+    enrollments = relationship("CourseEnrollment", back_populates="course")  # Зв'язок зі студентами через CourseEnrollment
 
-    CourseID = Column(Integer, ForeignKey('courses.CourseID'), primary_key=True)
-    GroupID = Column(Integer, ForeignKey('studentgroups.GroupID'), primary_key=True)
+
+class CourseEnrollment(Base):
+    __tablename__ = 'courseenrollments'
+
+    CourseEnrollmentID = Column(Integer, primary_key=True, autoincrement=True)
+    CourseID = Column(Integer, ForeignKey('courses.CourseID'))
+    StudentID = Column(Integer, ForeignKey('students.StudentID'))
+
+    course = relationship("Course", back_populates="enrollments")  # Зв'язок з курсом
+    student = relationship("Student", backref="course_enrollments")  # Зв'язок зі студентом
+
 
 class PersonalQuestion(Base):
     __tablename__ = 'personalquestions'

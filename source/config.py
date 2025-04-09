@@ -17,6 +17,7 @@ WAITING_FOR_USER_DETAILS = "waiting_for_user_details"  # Очікування в
 WAITING_FOR_STUDENT_DETAILS = "waiting_for_student_details"
 
 
+
 BOT_TOKEN = "7946045090:AAGz4mbCcE_TC8CIcDuh4jQsgZgBSdGgi5g"
 
 DB_CONFIG = {

@@ -2,6 +2,7 @@ from telegram.ext import Application, CommandHandler, CallbackQueryHandler, Mess
 from source.announcements.publication import announcement_selector_handler
 from source.auth.registration import start, confirm_callback_handler, confirm_command, confirm
 from source.config import BOT_TOKEN
+from source.courses.handlers import course_callback_handler, back_to_courses_handler
 from source.faq.handlers import register_faq_handlers
 from source.utils import message_handler
 
@@ -26,6 +27,8 @@ def main():
     # Реєстрація обробників команд
     application.add_handler(CommandHandler("confirm", confirm_command))
     application.add_handler(MessageHandler(filters.Regex("^Підтвердити реєстрацію$"), confirm))
+    application.add_handler(CallbackQueryHandler(back_to_courses_handler, pattern="^back_teachercourses$"))
+    application.add_handler(CallbackQueryHandler(course_callback_handler, pattern="^teachercourse_"))
 
     # Запуск бота
     application.run_polling()
