@@ -1,11 +1,14 @@
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters
 from source.announcements.publication import announcement_selector_handler
-from source.auth.registration import start, confirm_callback_handler, confirm_command, confirm
+from source.auth.registration import start, confirm_callback_handler, confirm_command, confirm, edit_user_handler, \
+    edit_user_callback_handler, edit_field_callback_handler, delete_user_handler
 from source.config import BOT_TOKEN
 from source.courses.handlers import course_callback_handler, back_to_courses_handler
+from source.documents.db_queries import confirm_document_request
+from source.documents.handlers import doc_request, select_document, cancel_document_request, handle_doc_request, \
+    reject_document_request, process_document_request
 from source.faq.handlers import register_faq_handlers
 from source.utils import message_handler
-
 
 def main():
     # Створюємо об'єкт додатку
@@ -16,12 +19,24 @@ def main():
 
     # Обробник повідомлень
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message_handler))
+
     register_faq_handlers(application)
 
-    # Спочатку реєструємо більш специфічний обробник для підтвердження
+    # Обробник підтвердження реєстрації
     application.add_handler(CallbackQueryHandler(confirm_callback_handler, pattern=r"^confirm_|cancel_confirmation$"))
 
-    # Потім реєструємо загальний обробник для оголошень
+    # Обробники редагування користувачів
+    application.add_handler(CallbackQueryHandler(edit_user_callback_handler, pattern=r"^edit_"))
+    application.add_handler(CallbackQueryHandler(edit_field_callback_handler, pattern=r"^edit_name|edit_phone|edit_group|edit_year$"))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, edit_user_handler))  # Введення нового значення
+
+    # Додаємо обробник стану редагування
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message_handler))
+
+    # Обробник видалення заявки
+    application.add_handler(CallbackQueryHandler(delete_user_handler, pattern=r"^delete_"))
+
+    # Загальні обробники оголошень
     application.add_handler(CallbackQueryHandler(announcement_selector_handler, pattern="^(announce_to_|course_|dept_|group_|teacher_|show_|back_to_|cancel_)"))
 
     # Реєстрація обробників команд
@@ -30,8 +45,19 @@ def main():
     application.add_handler(CallbackQueryHandler(back_to_courses_handler, pattern="^back_teachercourses$"))
     application.add_handler(CallbackQueryHandler(course_callback_handler, pattern="^teachercourse_"))
 
+    application.add_handler(CommandHandler('doc_request', doc_request))
+    application.add_handler(CallbackQueryHandler(select_document, pattern='^doc_select_'))
+    application.add_handler(CallbackQueryHandler(confirm_document_request, pattern='^doc_confirm_'))
+    application.add_handler(CallbackQueryHandler(cancel_document_request, pattern='^cancel_doc$'))
+
+    application.add_handler(CallbackQueryHandler(handle_doc_request, pattern="^handle_request_"))
+    application.add_handler(CallbackQueryHandler(reject_document_request, pattern="^reject_doc_"))
+    application.add_handler(CallbackQueryHandler(process_document_request, pattern="^process_doc_"))
+
     # Запуск бота
     application.run_polling()
+
+
 
 if __name__ == "__main__":
     main()

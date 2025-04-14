@@ -28,6 +28,9 @@ class Student(Base):
 
     user = relationship("User", back_populates="students")
     group = relationship("StudentGroup", back_populates="students")
+    document_requests = relationship("DocumentRequest", back_populates="student")
+    course_enrollments = relationship("CourseEnrollment", back_populates="student")
+
 
 class Teacher(Base):
     __tablename__ = 'teachers'
@@ -92,12 +95,12 @@ class Course(Base):
 class CourseEnrollment(Base):
     __tablename__ = 'courseenrollments'
 
-    CourseEnrollmentID = Column(Integer, primary_key=True, autoincrement=True)
-    CourseID = Column(Integer, ForeignKey('courses.CourseID'))
-    StudentID = Column(Integer, ForeignKey('students.StudentID'))
+    CourseID = Column(Integer, ForeignKey('courses.CourseID'), primary_key=True)
+    StudentID = Column(Integer, ForeignKey('students.StudentID'), primary_key=True)
 
-    course = relationship("Course", back_populates="enrollments")  # Зв'язок з курсом
-    student = relationship("Student", backref="course_enrollments")  # Зв'язок зі студентом
+    course = relationship("Course", back_populates="enrollments")
+    student = relationship("Student", back_populates="course_enrollments")
+
 
 
 class PersonalQuestion(Base):
@@ -118,10 +121,22 @@ class FAQ(Base):
     Question = Column(Text, nullable=False)
     Answer = Column(Text, nullable=False)
 
+
+class DocumentType(Base):
+    __tablename__ = 'documenttypes'
+
+    TypeID = Column(Integer, primary_key=True, autoincrement=True)
+    TypeName = Column(String(100), nullable=False)
+
+    requests = relationship("DocumentRequest", back_populates="document_type")
+
 class DocumentRequest(Base):
     __tablename__ = 'documentrequests'
 
     RequestID = Column(Integer, primary_key=True, autoincrement=True)
     StudentID = Column(Integer, ForeignKey('students.StudentID'), nullable=False)
-    DocumentType = Column(String(100), nullable=False)
+    TypeID = Column(Integer, ForeignKey('documenttypes.TypeID'), nullable=False)
     Status = Column(Enum('pending', 'approved', 'rejected'), nullable=False, default='pending')
+
+    student = relationship("Student", back_populates="document_requests")
+    document_type = relationship("DocumentType", back_populates="requests")

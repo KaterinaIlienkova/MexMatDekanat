@@ -15,6 +15,8 @@ WAITING_FOR_ANNOUNCEMENT_TEXT = "waiting_for_announcement_text"
 WAITING_FOR_USER_ROLE = "waiting_for_user_role"  # Очікування вибору ролі (студент/викладач)
 WAITING_FOR_USER_DETAILS = "waiting_for_user_details"  # Очікування введення даних нового користувача
 WAITING_FOR_STUDENT_DETAILS = "waiting_for_student_details"
+WAITING_FOR_SCAN_LINK = "waiting_for_scan_link"
+WAITING_FOR_EDIT_FIELD = "waiting_for_edit_field"
 
 
 

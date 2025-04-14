@@ -1,15 +1,20 @@
+import telegram
 from sqlalchemy.exc import SQLAlchemyError
 from telegram import Update, KeyboardButton, ReplyKeyboardMarkup, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import CallbackContext, CallbackQueryHandler
 from sqlalchemy.orm import Session
 
-from source.config import WAITING_FOR_USER_ROLE, WAITING_FOR_USER_DETAILS, WAITING_FOR_STUDENT_DETAILS
+from source.config import WAITING_FOR_USER_ROLE, WAITING_FOR_USER_DETAILS, WAITING_FOR_STUDENT_DETAILS, \
+    WAITING_FOR_EDIT_FIELD
 from source.database import SessionLocal
 from sqlalchemy import text
 from typing import Any, Optional
 from sqlalchemy.orm import Session
-from source.models import User, Student, Teacher, StudentGroup, DeanOfficeStaff, Department, Specialty
+from source.models import User, Student, Teacher, StudentGroup, DeanOfficeStaff, Department, Specialty, DocumentRequest, \
+    CourseEnrollment, Course, PersonalQuestion
 import logging
+from telegram.error import BadRequest
+
 logger = logging.getLogger(__name__)
 
 from source.models import Student, StudentGroup, Department, Teacher, User
@@ -80,9 +85,10 @@ async def start(update: Update, context: CallbackContext):
 
     if role == "dean_office":
         keyboard = [[KeyboardButton("Інструкції"), KeyboardButton("Додати користувача"),
-                     KeyboardButton("Редагувати Q&A"), KeyboardButton("Оголошення"), KeyboardButton("Підтвердити реєстрацію")]]
+                     KeyboardButton("Редагувати Q&A"), KeyboardButton("Оголошення"),
+                     KeyboardButton("Підтвердити реєстрацію"), KeyboardButton("Заявки на документи")]]
     elif role == "student":
-        keyboard = [[KeyboardButton("Q&A")],[KeyboardButton("Мої поточні курси")]]  # Q&A на панельці для студентів
+        keyboard = [[KeyboardButton("Q&A")],[KeyboardButton("Мої поточні курси")],[KeyboardButton("Замовити документ")]]  # Q&A на панельці для студентів
     elif role == "teacher":
         keyboard = [[KeyboardButton("Списки студентів")]]
     else:
@@ -264,7 +270,6 @@ async def save_new_user(update: Update, context: CallbackContext):
 async def prompt_user_details(update: Update, context: CallbackContext):
     context.user_data["state"] = WAITING_FOR_USER_ROLE  # Перевірте, що цей рядок є у функції
     await update.message.reply_text("Виберіть роль нового користувача: student або teacher")
-
 def confirm_user(session: Session, telegram_tag: str) -> bool:
     user = session.query(User).filter_by(TelegramTag=telegram_tag).first()
     if user and not user.IsConfirmed:
@@ -272,6 +277,97 @@ def confirm_user(session: Session, telegram_tag: str) -> bool:
         session.commit()
         return True
     return False
+
+def delete_user(session: Session, telegram_tag: str) -> bool:
+    """Видаляє заявку користувача на реєстрацію."""
+    try:
+        user = session.query(User).filter_by(TelegramTag=telegram_tag).first()
+
+        if not user:
+            return False  # Користувача не знайдено
+
+        # Видаляємо залежні записи, якщо вони є
+        if user.Role == "student":
+            session.query(DocumentRequest).filter_by(StudentID=user.students.StudentID).delete()
+            session.query(CourseEnrollment).filter_by(StudentID=user.students.StudentID).delete()
+            session.delete(user.students)
+
+        elif user.Role == "teacher":
+            session.query(Course).filter_by(TeacherID=user.teachers.TeacherID).delete()
+            session.delete(user.teachers)
+
+        elif user.Role == "dean_office":
+            session.delete(user.dean_office_staff)
+
+        # Видаляємо особисті питання
+        session.query(PersonalQuestion).filter_by(UserID=user.UserID).delete()
+
+        # Видаляємо самого користувача
+        session.delete(user)
+        session.commit()
+
+        return True
+
+    except SQLAlchemyError as e:
+        logger.exception(f"Помилка при видаленні заявки користувача: {e}")
+        session.rollback()
+        return False
+
+
+async def delete_user_handler(update: Update, context: CallbackContext):
+    """Обробляє видалення заявки користувача."""
+    query = update.callback_query
+    await query.answer()
+
+    callback_data = query.data
+
+    if callback_data == "cancel_delete":
+        await query.edit_message_text("❌ Видалення скасовано.")
+        return
+
+    # Отримуємо TelegramTag із callback_data
+    try:
+        telegram_tag = callback_data.replace("delete_", "")
+
+        # Використовуємо SessionLocal як менеджер контексту
+        with SessionLocal() as db:
+            success = delete_user(db, telegram_tag)
+
+            if success:
+                await query.edit_message_text("✅ Заявку користувача успішно видалено.")
+            else:
+                await query.edit_message_text("❌ Не вдалося видалити заявку. Спробуйте пізніше.")
+    except Exception as e:
+        logger.exception(f"Помилка при видаленні заявки користувача: {e}")
+        await query.edit_message_text("🚨 Сталася помилка при видаленні заявки.")
+
+
+async def confirm_delete_handler(update: Update, context: CallbackContext):
+    query = update.callback_query
+    await query.answer()
+
+    telegram_tag = query.data.replace("confirm_delete_", "")
+
+    with SessionLocal() as db:
+        user = db.query(User).filter_by(TelegramTag=telegram_tag).first()
+        if user:
+            db.delete(user)
+            db.commit()
+            await query.edit_message_text(f"✅ Користувача @{telegram_tag} успішно видалено.")
+        else:
+            await query.edit_message_text(f"❌ Не вдалося знайти @{telegram_tag} для видалення.")
+
+
+def update_user(session: Session, telegram_tag: str, new_data: dict) -> bool:
+    user = session.query(User).filter_by(TelegramTag=telegram_tag).first()
+    if user:
+        for key, value in new_data.items():
+            if hasattr(user, key):
+                setattr(user, key, value)
+        session.commit()
+        return True
+    return False
+
 
 
 async def confirm_command(update: Update, context: CallbackContext):
@@ -287,7 +383,8 @@ async def confirm_command(update: Update, context: CallbackContext):
 
 
 async def confirm(update: Update, context: CallbackContext) -> None:
-    """Показує всіх неверифікованих студентів для підтвердження"""
+    """Показує всіх неверифікованих студентів для підтвердження, редагування або видалення"""
+
     # Отримання всіх неверифікованих студентів
     with SessionLocal() as db:
         unconfirmed_users = db.query(User).filter_by(IsConfirmed=False, Role='student').all()
@@ -298,6 +395,9 @@ async def confirm(update: Update, context: CallbackContext) -> None:
 
         # Створюємо повідомлення зі списком усіх заявок
         message_text = "📋 Список заявок на підтвердження:\n\n"
+
+        keyboard = []
+        row = []
 
         for i, user in enumerate(unconfirmed_users, 1):
             # Додаємо базову інформацію про користувача
@@ -314,28 +414,30 @@ async def confirm(update: Update, context: CallbackContext) -> None:
 
             message_text += "\n"
 
-        # Створюємо клавіатуру з номерами заявок
-        keyboard = []
-        row = []
+            # Створюємо кнопки для підтвердження, редагування та видалення
+            button = InlineKeyboardButton(f"✅ #{i}", callback_data=f"confirm_{user.TelegramTag}")
+            edit_button = InlineKeyboardButton("✏️ Редагувати", callback_data=f"edit_{user.TelegramTag}")
+            delete_button = InlineKeyboardButton("🗑 Видалити", callback_data=f"delete_{user.TelegramTag}")
 
-        for i, user in enumerate(unconfirmed_users, 1):
-            # Створюємо кнопки по 3 в ряд
-            button = InlineKeyboardButton(f"#{i}", callback_data=f"confirm_{user.TelegramTag}")
             row.append(button)
+            row.append(edit_button)
+            row.append(delete_button)
 
             if len(row) == 3 or i == len(unconfirmed_users):
                 keyboard.append(row)
                 row = []
 
         # Додаємо кнопку скасування
-        keyboard.append([InlineKeyboardButton("Скасувати", callback_data="cancel_confirmation")])
+        keyboard.append([InlineKeyboardButton("🚫 Скасувати", callback_data="cancel_confirmation")])
 
         reply_markup = InlineKeyboardMarkup(keyboard)
 
         await update.message.reply_text(
-            message_text + "Натисніть на номер заявки, щоб підтвердити реєстрацію:",
+            message_text + "Натисніть на номер заявки, щоб підтвердити реєстрацію, або використовуйте кнопки для редагування чи видалення:",
             reply_markup=reply_markup
         )
+
+
 async def confirm_callback_handler(update: Update, context: CallbackContext) -> None:
     """Обробляє натискання кнопок підтвердження користувачів"""
     query = update.callback_query
@@ -347,26 +449,137 @@ async def confirm_callback_handler(update: Update, context: CallbackContext) -> 
         await query.edit_message_text("Операцію скасовано.")
         return
 
-    # Отримуємо telegram_tag користувача
-    telegram_tag = query.data.replace("confirm_", "")
 
-    # Підтверджуємо користувача
+    if query.data.startswith("edit_"):
+        telegram_tag = query.data.replace("edit_", "")
+        await query.message.reply_text(f"✏️ Введіть нові дані для @{telegram_tag} у форматі: 'Поле=значення, Поле=значення'")
+        context.user_data["edit_user"] = telegram_tag
+        return
+
+    if query.data.startswith("delete_"):
+        telegram_tag = query.data.replace("delete_", "")
+        with SessionLocal() as db:
+            if delete_user(db, telegram_tag):
+                await query.edit_message_text(f"🗑 Користувача @{telegram_tag} видалено.")
+            else:
+                await query.edit_message_text(f"❌ Не вдалося видалити @{telegram_tag}.")
+        return
+    else:
+        # Отримуємо telegram_tag користувача
+        telegram_tag = query.data.replace("confirm_", "")
+
+        # Підтверджуємо користувача
+        with SessionLocal() as db:
+            if confirm_user(db, telegram_tag):
+                # Отримуємо ім'я користувача для повідомлення
+                user = db.query(User).filter_by(TelegramTag=telegram_tag).first()
+                username = user.UserName if user else telegram_tag
+
+                await query.edit_message_text(f"✅ Користувача {username} (@{telegram_tag}) успішно підтверджено.")
+
+                # Надсилаємо повідомлення користувачу про підтвердження реєстрації
+                if user and user.ChatID:
+                    try:
+                        await context.bot.send_message(
+                            chat_id=user.ChatID,
+                            text="✅ Вашу реєстрацію було підтверджено адміністратором. Тепер ви можете користуватися всіма функціями системи."
+                        )
+                    except Exception as e:
+                        logging.error(f"Помилка відправки повідомлення користувачу: {e}")
+            else:
+                await query.edit_message_text(f"❌ Не вдалося підтвердити користувача @{telegram_tag}.")
+
+async def edit_user_callback_handler(update: Update, context: CallbackContext):
+    """Обробляє вибір поля для редагування користувача."""
+    query = update.callback_query
+    await query.answer()
+
+    telegram_tag = query.data.replace("edit_", "")
+    context.user_data["edit_user_tag"] = telegram_tag
+
+    keyboard = [
+        [InlineKeyboardButton("Ім'я", callback_data="edit_name"),
+         InlineKeyboardButton("Номер телефону", callback_data="edit_phone")],
+        [InlineKeyboardButton("Група", callback_data="edit_group"),
+         InlineKeyboardButton("Рік вступу", callback_data="edit_year")],
+        [InlineKeyboardButton("❌ Скасувати", callback_data="cancel_edit")]
+    ]
+
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    await query.edit_message_text(
+        f"🔧 Оберіть поле для редагування користувача @{telegram_tag}:",
+        reply_markup=reply_markup
+    )
+
+async def edit_field_callback_handler(update: Update, context: CallbackContext):
+    """Запитує нове значення для вибраного поля."""
+    query = update.callback_query
+    await query.answer()
+
+    # Переконуємось, що telegram_tag залишається незмінним
+    telegram_tag = context.user_data.get("edit_user_tag")
+    if not telegram_tag:
+        await query.edit_message_text("❌ Помилка: TelegramTag користувача не знайдено.")
+        return
+
+    field_map = {
+        "edit_name": "Ім'я",
+        "edit_phone": "Номер телефону",
+        "edit_group": "Група",
+        "edit_year": "Рік вступу"
+    }
+
+    field = query.data
+    if field not in field_map:
+        await query.edit_message_text("❌ Некоректний вибір поля.")
+        return
+
+    # Зберігаємо вибране поле без зміни TelegramTag
+    context.user_data["edit_field"] = field
+    context.user_data["state"] = WAITING_FOR_EDIT_FIELD  # Встановлюємо стан
+
+    await query.edit_message_text(
+        f"✏️ Введіть нове значення для **{field_map[field]}** користувача @{telegram_tag}:"
+    )
+
+
+async def edit_user_handler(update: Update, context: CallbackContext):
+    """Змінює вибране поле у базі."""
+    telegram_tag = context.user_data.get("edit_user_tag")
+    field = context.user_data.get("edit_field")
+    new_value = update.message.text.strip()
+
+    field_mapping = {
+        "edit_name": "UserName",
+        "edit_phone": "PhoneNumber",
+        "edit_group": "GroupID",
+        "edit_year": "AdmissionYear"
+    }
+
+    if not telegram_tag or not field or field not in field_mapping:
+        await update.message.reply_text("❌ Спочатку оберіть поле для змін.")
+        return
+
     with SessionLocal() as db:
-        if confirm_user(db, telegram_tag):
-            # Отримуємо ім'я користувача для повідомлення
-            user = db.query(User).filter_by(TelegramTag=telegram_tag).first()
-            username = user.UserName if user else telegram_tag
-
-            await query.edit_message_text(f"✅ Користувача {username} (@{telegram_tag}) успішно підтверджено.")
-
-            # Надсилаємо повідомлення користувачу про підтвердження реєстрації
-            if user and user.ChatID:
-                try:
-                    await context.bot.send_message(
-                        chat_id=user.ChatID,
-                        text="✅ Вашу реєстрацію було підтверджено адміністратором. Тепер ви можете користуватися всіма функціями системи."
-                    )
-                except Exception as e:
-                    logging.error(f"Помилка відправки повідомлення користувачу: {e}")
+        user = db.query(User).filter_by(TelegramTag=telegram_tag).first()
+        if user:
+            setattr(user, field_mapping[field], new_value)
+            db.commit()
+            await update.message.reply_text(f"✅ Поле **{field_mapping[field]}** змінено для @{telegram_tag}.")
         else:
-            await query.edit_message_text(f"❌ Не вдалося підтвердити користувача @{telegram_tag}.")
+            await update.message.reply_text("❌ Користувач не знайдений.")
+
+    # Запитати, що робити далі
+    keyboard = [
+        [InlineKeyboardButton("✅ Підтвердити заявку", callback_data=f"confirm_{telegram_tag}")],
+        [InlineKeyboardButton("🔄 Змінити інше поле", callback_data=f"edit_{telegram_tag}")],
+        [InlineKeyboardButton("🗑 Видалити заявку", callback_data=f"delete_{telegram_tag}")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    await update.message.reply_text(
+        "Що робити далі?",
+        reply_markup=reply_markup
+    )
+

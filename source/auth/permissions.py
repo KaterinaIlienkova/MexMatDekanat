@@ -3,6 +3,7 @@ from telegram.ext import CallbackContext
 
 from source.auth.registration import confirm
 from source.courses.handlers import view_courses_by_student, view_students
+from source.documents.handlers import doc_request, doc_requested
 from source.faq.handlers import send_qa, show_edit_qa_options
 from source.announcements.publication import sent_publication
 
@@ -31,3 +32,7 @@ async def handle_button_click(update: Update, context: CallbackContext):
         await view_courses_by_student(update, context)  # Ініціювання публікації оголошення
     elif text == "Списки студентів":
         await view_students(update, context)  # Ініціювання публікації оголошення
+    elif text == "Замовити документ":
+        await doc_request(update, context)  # Ініціювання публікації оголошення
+    elif text == "Заявки на документи":
+        await doc_requested(update, context)  # Ініціювання публікації оголошення

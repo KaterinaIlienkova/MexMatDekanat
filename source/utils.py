@@ -6,9 +6,10 @@ from source.auth.permissions import handle_button_click
 from source.auth.registration import save_new_user, confirm_command
 from source.config import (WAITING_FOR_QUESTION, WAITING_FOR_ANSWER, WAITING_FOR_EDIT_ANSWER,
                            WAITING_FOR_ANNOUNCEMENT_TEXT, WAITING_FOR_USER_ROLE, WAITING_FOR_USER_DETAILS,
-                           WAITING_FOR_STUDENT_DETAILS)
+                           WAITING_FOR_STUDENT_DETAILS, WAITING_FOR_SCAN_LINK, WAITING_FOR_EDIT_FIELD)
 from source.database import SessionLocal
 from source.faq.handlers import add_faq, update_faq
+from source.models import DocumentRequest, Student, User
 
 
 async def message_handler(update: Update, context: CallbackContext):
@@ -115,6 +116,58 @@ async def message_handler(update: Update, context: CallbackContext):
         announcement_text = update.message.text
         await send_announcement(update, context)
         return
+
+    elif state == WAITING_FOR_SCAN_LINK:
+
+        scan_link = update.message.text
+        request_id = context.user_data.pop("processing_request_id")
+
+        with SessionLocal() as db:
+            request = db.query(DocumentRequest).filter(DocumentRequest.RequestID == request_id).first()
+            request.Status = 'approved'
+            db.commit()
+
+            student = db.query(Student).filter(Student.StudentID == request.StudentID).first()
+            user = db.query(User).filter(User.UserID == student.UserID).first()
+
+            await context.bot.send_message(
+                chat_id=user.ChatID,
+                text=f"✅ Ваша заявка №{request.RequestID} опрацьована!\nВи маєте можливість отримати паперову версію у деканаті або скан-копію документу за посиланням: {scan_link}"
+            )
+
+        await update.message.reply_text(f"Заявку №{request_id} оновлено та студенту надіслано посилання.")
+
+    elif state == WAITING_FOR_EDIT_FIELD:
+        telegram_tag = context.user_data.get("edit_user_tag")
+        field = context.user_data.get("edit_field")
+        new_value = update.message.text.strip()
+
+        field_mapping = {
+            "edit_name": "UserName",
+            "edit_phone": "PhoneNumber",
+            "edit_group": "GroupID",
+            "edit_year": "AdmissionYear"
+        }
+
+        # 🔹 Перевірка, щоб не було підміни TelegramTag:
+        if not telegram_tag or not field or field not in field_mapping:
+            await update.message.reply_text("❌ Спочатку оберіть поле для змін.")
+            return
+
+        # 🔹 Додаємо лог до консолі для перевірки:
+        print(f"Редагування: TelegramTag={telegram_tag}, Поле={field}, Значення={new_value}")
+
+        with SessionLocal() as db:
+            user = db.query(User).filter_by(TelegramTag=telegram_tag).first()
+            if user:
+                setattr(user, field_mapping[field], new_value)
+                db.commit()
+                await update.message.reply_text(f"✅ Поле **{field_mapping[field]}** змінено для @{telegram_tag}.")
+            else:
+                await update.message.reply_text("❌ Користувач не знайдений.")
+
+
+
 
     # Обробка кнопок
     await handle_button_click(update, context)
