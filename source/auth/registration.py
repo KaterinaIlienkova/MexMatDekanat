@@ -1,7 +1,8 @@
 import telegram
 from sqlalchemy.exc import SQLAlchemyError
 from telegram import Update, KeyboardButton, ReplyKeyboardMarkup, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import CallbackContext, CallbackQueryHandler
+from telegram.ext import CallbackContext, CallbackQueryHandler, ConversationHandler, MessageHandler, CommandHandler, \
+    filters
 from sqlalchemy.orm import Session
 
 from source.config import WAITING_FOR_USER_ROLE, WAITING_FOR_USER_DETAILS, WAITING_FOR_STUDENT_DETAILS, \
@@ -438,25 +439,248 @@ async def confirm(update: Update, context: CallbackContext) -> None:
         )
 
 
+# async def confirm_callback_handler(update: Update, context: CallbackContext) -> None:
+#     """Обробляє натискання кнопок підтвердження користувачів"""
+#     query = update.callback_query
+#     logging.info(f"confirm_callback_handler отримав запит: {query.data}")
+#     await query.answer()
+#     logging.info(f"Отримано callback-запит: {query.data}")
+#
+#     if query.data == "cancel_confirmation":
+#         await query.edit_message_text("Операцію скасовано.")
+#         return
+#
+#
+#     if query.data.startswith("edit_"):
+#         telegram_tag = query.data.replace("edit_", "")
+#         await query.message.reply_text(f"✏️ Введіть нові дані для @{telegram_tag} у форматі: 'Поле=значення, Поле=значення'")
+#         context.user_data["edit_user"] = telegram_tag
+#         return
+#
+#     if query.data.startswith("delete_"):
+#         telegram_tag = query.data.replace("delete_", "")
+#         with SessionLocal() as db:
+#             if delete_user(db, telegram_tag):
+#                 await query.edit_message_text(f"🗑 Користувача @{telegram_tag} видалено.")
+#             else:
+#                 await query.edit_message_text(f"❌ Не вдалося видалити @{telegram_tag}.")
+#         return
+#     else:
+#         # Отримуємо telegram_tag користувача
+#         telegram_tag = query.data.replace("confirm_", "")
+#
+#         # Підтверджуємо користувача
+#         with SessionLocal() as db:
+#             if confirm_user(db, telegram_tag):
+#                 # Отримуємо ім'я користувача для повідомлення
+#                 user = db.query(User).filter_by(TelegramTag=telegram_tag).first()
+#                 username = user.UserName if user else telegram_tag
+#
+#                 await query.edit_message_text(f"✅ Користувача {username} (@{telegram_tag}) успішно підтверджено.")
+#
+#                 # Надсилаємо повідомлення користувачу про підтвердження реєстрації
+#                 if user and user.ChatID:
+#                     try:
+#                         await context.bot.send_message(
+#                             chat_id=user.ChatID,
+#                             text="✅ Вашу реєстрацію було підтверджено адміністратором. Тепер ви можете користуватися всіма функціями системи."
+#                         )
+#                     except Exception as e:
+#                         logging.error(f"Помилка відправки повідомлення користувачу: {e}")
+#             else:
+#                 await query.edit_message_text(f"❌ Не вдалося підтвердити користувача @{telegram_tag}.")
+
+async def edit_user_handler(update: Update, context: CallbackContext):
+    """Обробляє редагування даних користувача"""
+    query = update.callback_query
+    await query.answer()
+
+    # Отримання TelegramTag користувача, якого треба редагувати
+    telegram_tag = query.data.replace("edit_", "")
+
+    # Створюємо кнопки для вибору поля для редагування
+    keyboard = [
+        [
+            InlineKeyboardButton("Ім'я", callback_data=f"edit_name_{telegram_tag}"),
+            InlineKeyboardButton("Телефон", callback_data=f"edit_phone_{telegram_tag}")
+        ],
+        [
+            InlineKeyboardButton("Група", callback_data=f"edit_group_{telegram_tag}"),
+            InlineKeyboardButton("Рік вступу", callback_data=f"edit_year_{telegram_tag}")
+        ],
+        [InlineKeyboardButton("🚫 Скасувати", callback_data="cancel_edit")]
+    ]
+
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    await query.edit_message_text(
+        f"Виберіть, яке поле ви хочете змінити для користувача @{telegram_tag}:",
+        reply_markup=reply_markup
+    )
+
+async def edit_field_handler(update: Update, context: CallbackContext):
+    """Обробляє вибір поля для редагування"""
+    query = update.callback_query
+    await query.answer()
+
+    if query.data == "cancel_edit":
+        await query.edit_message_text("❌ Редагування скасовано.")
+        return
+
+    # Розбираємо callback_data для отримання поля та telegram_tag
+    parts = query.data.split("_")
+    field = parts[1]  # name, phone, group, year
+    telegram_tag = parts[2]
+
+    # Зберігаємо дані в контексті для використання в наступному хендлері
+    context.user_data["edit_field"] = field
+    context.user_data["edit_user_tag"] = telegram_tag
+
+    field_names = {
+        "name": "ім'я",
+        "phone": "номер телефону",
+        "group": "групу",
+        "year": "рік вступу"
+    }
+
+    # Важливо: не редагуйте оригінальне повідомлення, а надішліть нове
+    await query.edit_message_text(f"Очікую нове значення для {field_names[field]}...")
+    await context.bot.send_message(
+        chat_id=query.message.chat_id,
+        text=f"✏️ Введіть нове значення для поля '{field_names[field]}' користувача @{telegram_tag}:"
+    )
+
+async def process_edit_value(update: Update, context: CallbackContext):
+    """Обробляє введене нове значення та оновлює базу даних"""
+    new_value = update.message.text
+    field = context.user_data.get("edit_field")
+    telegram_tag = context.user_data.get("edit_user_tag")
+
+    if not field or not telegram_tag:
+        await update.message.reply_text("❌ Помилка: дані для редагування не знайдено.")
+        return ConversationHandler.END
+
+    with SessionLocal() as db:
+        user = db.query(User).filter_by(TelegramTag=telegram_tag).first()
+        if not user:
+            await update.message.reply_text(f"❌ Користувача @{telegram_tag} не знайдено.")
+            return ConversationHandler.END
+
+        try:
+            if field == "name":
+                user.UserName = new_value
+                db.commit()
+            elif field == "phone":
+                user.PhoneNumber = new_value
+                db.commit()
+            elif field == "year":
+                student = db.query(Student).filter_by(UserID=user.UserID).first()
+                if student:
+                    try:
+                        year = int(new_value)
+                        student.AdmissionYear = year
+                        db.commit()
+                    except ValueError:
+                        await update.message.reply_text("❌ Рік вступу повинен бути числом.")
+                        return ConversationHandler.END
+                else:
+                    await update.message.reply_text("❌ Цей користувач не є студентом.")
+                    return ConversationHandler.END
+            elif field == "group":
+                student = db.query(Student).filter_by(UserID=user.UserID).first()
+                if student:
+                    # Спочатку перевіряємо, чи існує група з таким ім'ям
+                    group = db.query(StudentGroup).filter_by(GroupName=new_value).first()
+                    if group:
+                        student.GroupID = group.GroupID
+                        db.commit()
+                    else:
+                        # Якщо введено ID групи замість назви
+                        try:
+                            group_id = int(new_value)
+                            group = db.query(StudentGroup).filter_by(GroupID=group_id).first()
+                            if group:
+                                student.GroupID = group_id
+                                db.commit()
+                            else:
+                                await update.message.reply_text(f"❌ Групу з ID {group_id} не знайдено.")
+                                return ConversationHandler.END
+                        except ValueError:
+                            await update.message.reply_text("❌ Такої групи не існує.")
+                            return ConversationHandler.END
+                else:
+                    await update.message.reply_text("❌ Цей користувач не є студентом.")
+                    return ConversationHandler.END
+
+            await update.message.reply_text(f"✅ Дані користувача @{telegram_tag} успішно оновлено.")
+
+            # Відправляємо повідомлення користувачу про зміну його даних
+            if user.ChatID:
+                field_names = {
+                    "name": "ім'я",
+                    "phone": "номер телефону",
+                    "group": "група",
+                    "year": "рік вступу"
+                }
+                try:
+                    await context.bot.send_message(
+                        chat_id=user.ChatID,
+                        text=f"ℹ️ Адміністратор змінив ваші дані: {field_names[field]} встановлено на '{new_value}'."
+                    )
+                except Exception as e:
+                    logging.error(f"Помилка відправки повідомлення користувачу: {e}")
+
+        except SQLAlchemyError as e:
+            logger.exception(f"Помилка при оновленні даних користувача: {e}")
+            db.rollback()
+            await update.message.reply_text("❌ Помилка бази даних при оновленні даних користувача.")
+
+    # Скидаємо дані контексту
+    if "edit_field" in context.user_data:
+        del context.user_data["edit_field"]
+    if "edit_user_tag" in context.user_data:
+        del context.user_data["edit_user_tag"]
+
+    return ConversationHandler.END
+
+# Функція для отримання списку груп для зручності вибору
+async def get_groups_list(update: Update, context: CallbackContext):
+    """Показує список доступних груп"""
+    with SessionLocal() as db:
+        groups = db.query(StudentGroup).all()
+
+        if not groups:
+            await update.message.reply_text("❌ У базі даних немає жодної групи.")
+            return
+
+        message_text = "📋 Доступні групи:\n\n"
+        for group in groups:
+            message_text += f"ID: {group.GroupID} - {group.GroupName}\n"
+
+        await update.message.reply_text(message_text)
+
+# Оновлення основного хендлера для обробки callback-запитів
 async def confirm_callback_handler(update: Update, context: CallbackContext) -> None:
-    """Обробляє натискання кнопок підтвердження користувачів"""
+    """Обробляє натискання кнопок підтвердження та редагування користувачів"""
     query = update.callback_query
     logging.info(f"confirm_callback_handler отримав запит: {query.data}")
     await query.answer()
-    logging.info(f"Отримано callback-запит: {query.data}")
 
+    # Обробка різних callback_data
     if query.data == "cancel_confirmation":
         await query.edit_message_text("Операцію скасовано.")
         return
-
-
-    if query.data.startswith("edit_"):
-        telegram_tag = query.data.replace("edit_", "")
-        await query.message.reply_text(f"✏️ Введіть нові дані для @{telegram_tag} у форматі: 'Поле=значення, Поле=значення'")
-        context.user_data["edit_user"] = telegram_tag
+    elif query.data == "cancel_edit":
+        await query.edit_message_text("❌ Редагування скасовано.")
         return
-
-    if query.data.startswith("delete_"):
+    elif query.data.startswith("edit_"):
+        if len(query.data.split("_")) == 2:  # Формат: edit_username
+            await edit_user_handler(update, context)
+            return
+        elif len(query.data.split("_")) == 3:  # Формат: edit_field_username
+            await edit_field_handler(update, context)
+            return
+    elif query.data.startswith("delete_"):
         telegram_tag = query.data.replace("delete_", "")
         with SessionLocal() as db:
             if delete_user(db, telegram_tag):
@@ -464,8 +688,8 @@ async def confirm_callback_handler(update: Update, context: CallbackContext) -> 
             else:
                 await query.edit_message_text(f"❌ Не вдалося видалити @{telegram_tag}.")
         return
-    else:
-        # Отримуємо telegram_tag користувача
+    elif query.data.startswith("confirm_"):
+        # Отримуємо telegram_tag користувача для підтвердження
         telegram_tag = query.data.replace("confirm_", "")
 
         # Підтверджуємо користувача
@@ -488,98 +712,19 @@ async def confirm_callback_handler(update: Update, context: CallbackContext) -> 
                         logging.error(f"Помилка відправки повідомлення користувачу: {e}")
             else:
                 await query.edit_message_text(f"❌ Не вдалося підтвердити користувача @{telegram_tag}.")
+# Додавання ConversationHandler для процесу редагування
+edit_conv_handler = ConversationHandler(
+    entry_points=[
+        CallbackQueryHandler(edit_field_handler, pattern=r"^edit_[a-z]+_\w+$")
+    ],
+    states={
+        "AWAITING_EDIT_VALUE": [MessageHandler(filters.TEXT & ~filters.COMMAND, process_edit_value)]
+    },
+    fallbacks=[CommandHandler("cancel", lambda u, c: ConversationHandler.END)]
+)
 
-async def edit_user_callback_handler(update: Update, context: CallbackContext):
-    """Обробляє вибір поля для редагування користувача."""
-    query = update.callback_query
-    await query.answer()
-
-    telegram_tag = query.data.replace("edit_", "")
-    context.user_data["edit_user_tag"] = telegram_tag
-
-    keyboard = [
-        [InlineKeyboardButton("Ім'я", callback_data="edit_name"),
-         InlineKeyboardButton("Номер телефону", callback_data="edit_phone")],
-        [InlineKeyboardButton("Група", callback_data="edit_group"),
-         InlineKeyboardButton("Рік вступу", callback_data="edit_year")],
-        [InlineKeyboardButton("❌ Скасувати", callback_data="cancel_edit")]
-    ]
-
-    reply_markup = InlineKeyboardMarkup(keyboard)
-
-    await query.edit_message_text(
-        f"🔧 Оберіть поле для редагування користувача @{telegram_tag}:",
-        reply_markup=reply_markup
-    )
-
-async def edit_field_callback_handler(update: Update, context: CallbackContext):
-    """Запитує нове значення для вибраного поля."""
-    query = update.callback_query
-    await query.answer()
-
-    # Переконуємось, що telegram_tag залишається незмінним
-    telegram_tag = context.user_data.get("edit_user_tag")
-    if not telegram_tag:
-        await query.edit_message_text("❌ Помилка: TelegramTag користувача не знайдено.")
-        return
-
-    field_map = {
-        "edit_name": "Ім'я",
-        "edit_phone": "Номер телефону",
-        "edit_group": "Група",
-        "edit_year": "Рік вступу"
-    }
-
-    field = query.data
-    if field not in field_map:
-        await query.edit_message_text("❌ Некоректний вибір поля.")
-        return
-
-    # Зберігаємо вибране поле без зміни TelegramTag
-    context.user_data["edit_field"] = field
-    context.user_data["state"] = WAITING_FOR_EDIT_FIELD  # Встановлюємо стан
-
-    await query.edit_message_text(
-        f"✏️ Введіть нове значення для **{field_map[field]}** користувача @{telegram_tag}:"
-    )
-
-
-async def edit_user_handler(update: Update, context: CallbackContext):
-    """Змінює вибране поле у базі."""
-    telegram_tag = context.user_data.get("edit_user_tag")
-    field = context.user_data.get("edit_field")
-    new_value = update.message.text.strip()
-
-    field_mapping = {
-        "edit_name": "UserName",
-        "edit_phone": "PhoneNumber",
-        "edit_group": "GroupID",
-        "edit_year": "AdmissionYear"
-    }
-
-    if not telegram_tag or not field or field not in field_mapping:
-        await update.message.reply_text("❌ Спочатку оберіть поле для змін.")
-        return
-
-    with SessionLocal() as db:
-        user = db.query(User).filter_by(TelegramTag=telegram_tag).first()
-        if user:
-            setattr(user, field_mapping[field], new_value)
-            db.commit()
-            await update.message.reply_text(f"✅ Поле **{field_mapping[field]}** змінено для @{telegram_tag}.")
-        else:
-            await update.message.reply_text("❌ Користувач не знайдений.")
-
-    # Запитати, що робити далі
-    keyboard = [
-        [InlineKeyboardButton("✅ Підтвердити заявку", callback_data=f"confirm_{telegram_tag}")],
-        [InlineKeyboardButton("🔄 Змінити інше поле", callback_data=f"edit_{telegram_tag}")],
-        [InlineKeyboardButton("🗑 Видалити заявку", callback_data=f"delete_{telegram_tag}")]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-
-    await update.message.reply_text(
-        "Що робити далі?",
-        reply_markup=reply_markup
-    )
-
+# Функція для додавання хендлерів до диспетчера
+def register_edit_handlers(application):
+    """Реєструє обробники для функціоналу редагування"""
+    application.add_handler(edit_conv_handler)
+    application.add_handler(CommandHandler("groups", get_groups_list))

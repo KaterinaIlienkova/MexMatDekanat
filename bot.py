@@ -1,7 +1,7 @@
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters
 from source.announcements.publication import announcement_selector_handler
-from source.auth.registration import start, confirm_callback_handler, confirm_command, confirm, edit_user_handler, \
-    edit_user_callback_handler, edit_field_callback_handler, delete_user_handler
+from source.auth.registration import start, confirm_callback_handler, confirm_command, confirm, delete_user_handler, \
+    get_groups_list, edit_user_handler, register_edit_handlers, edit_field_handler
 from source.config import BOT_TOKEN
 from source.courses.handlers import course_callback_handler, back_to_courses_handler
 from source.documents.db_queries import confirm_document_request
@@ -9,7 +9,6 @@ from source.documents.handlers import doc_request, select_document, cancel_docum
     reject_document_request, process_document_request
 from source.faq.handlers import register_faq_handlers
 from source.utils import message_handler
-
 def main():
     # Створюємо об'єкт додатку
     application = Application.builder().token(BOT_TOKEN).build()
@@ -22,16 +21,12 @@ def main():
 
     register_faq_handlers(application)
 
+    # Важливо: спочатку реєструємо обробники з точнішими шаблонами
+    application.add_handler(CallbackQueryHandler(edit_field_handler, pattern=r"^edit_[a-z]+_\w+$"))
+    application.add_handler(CallbackQueryHandler(edit_user_handler, pattern=r"^edit_\w+$"))
+
     # Обробник підтвердження реєстрації
-    application.add_handler(CallbackQueryHandler(confirm_callback_handler, pattern=r"^confirm_|cancel_confirmation$"))
-
-    # Обробники редагування користувачів
-    application.add_handler(CallbackQueryHandler(edit_user_callback_handler, pattern=r"^edit_"))
-    application.add_handler(CallbackQueryHandler(edit_field_callback_handler, pattern=r"^edit_name|edit_phone|edit_group|edit_year$"))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, edit_user_handler))  # Введення нового значення
-
-    # Додаємо обробник стану редагування
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message_handler))
+    application.add_handler(CallbackQueryHandler(confirm_callback_handler, pattern=r"^confirm_|cancel_"))
 
     # Обробник видалення заявки
     application.add_handler(CallbackQueryHandler(delete_user_handler, pattern=r"^delete_"))
@@ -41,6 +36,7 @@ def main():
 
     # Реєстрація обробників команд
     application.add_handler(CommandHandler("confirm", confirm_command))
+    application.add_handler(CommandHandler("groups", get_groups_list))
     application.add_handler(MessageHandler(filters.Regex("^Підтвердити реєстрацію$"), confirm))
     application.add_handler(CallbackQueryHandler(back_to_courses_handler, pattern="^back_teachercourses$"))
     application.add_handler(CallbackQueryHandler(course_callback_handler, pattern="^teachercourse_"))
@@ -56,8 +52,6 @@ def main():
 
     # Запуск бота
     application.run_polling()
-
-
 
 if __name__ == "__main__":
     main()
