@@ -2,7 +2,7 @@ from telegram import Update
 from telegram.ext import CallbackContext
 
 from source.auth.registration import confirm
-from source.courses.handlers import view_courses_by_student, view_students
+from source.courses.handlers import view_courses_by_student, view_students, courses
 from source.documents.handlers import doc_request, doc_requested
 from source.faq.handlers import send_qa, show_edit_qa_options
 from source.announcements.publication import sent_publication
@@ -27,12 +27,14 @@ async def handle_button_click(update: Update, context: CallbackContext):
     elif text == "Оголошення":
         await sent_publication(update, context)  # Ініціювання публікації оголошення
     elif text == "Підтвердити реєстрацію":
-        await confirm(update, context)  # Ініціювання публікації оголошення
+        await confirm(update, context)
     elif text == "Мої поточні курси":
-        await view_courses_by_student(update, context)  # Ініціювання публікації оголошення
+        await view_courses_by_student(update, context)
     elif text == "Списки студентів":
-        await view_students(update, context)  # Ініціювання публікації оголошення
+        await view_students(update, context)
     elif text == "Замовити документ":
-        await doc_request(update, context)  # Ініціювання публікації оголошення
+        await doc_request(update, context)
     elif text == "Заявки на документи":
-        await doc_requested(update, context)  # Ініціювання публікації оголошення
+        await doc_requested(update, context)  # Працівник деканату ініціює перегляд заявок на отримання документів
+    elif text == "Курси":
+        await courses(update, context)

@@ -91,7 +91,7 @@ async def start(update: Update, context: CallbackContext):
     elif role == "student":
         keyboard = [[KeyboardButton("Q&A")],[KeyboardButton("Мої поточні курси")],[KeyboardButton("Замовити документ")]]  # Q&A на панельці для студентів
     elif role == "teacher":
-        keyboard = [[KeyboardButton("Списки студентів")]]
+        keyboard = [[KeyboardButton("Списки студентів")],[KeyboardButton("Курси")]]
     else:
         keyboard = []
 

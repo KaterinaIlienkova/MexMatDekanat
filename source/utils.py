@@ -8,6 +8,8 @@ from source.auth.registration import save_new_user, confirm_command, edit_user_h
 from source.config import (WAITING_FOR_QUESTION, WAITING_FOR_ANSWER, WAITING_FOR_EDIT_ANSWER,
                            WAITING_FOR_ANNOUNCEMENT_TEXT, WAITING_FOR_USER_ROLE, WAITING_FOR_USER_DETAILS,
                            WAITING_FOR_STUDENT_DETAILS, WAITING_FOR_SCAN_LINK, WAITING_FOR_EDIT_FIELD)
+from source.courses.db_queries import get_teacher_id_by_username, add_new_course
+from source.courses.handlers import ADD_COURSE_LINK, ADD_COURSE_PLATFORM, ADD_COURSE_NAME, courses
 from source.database import SessionLocal
 from source.faq.handlers import add_faq, update_faq
 from source.models import DocumentRequest, Student, User, StudentGroup
@@ -16,6 +18,13 @@ logger = logging.getLogger(__name__)
 
 async def message_handler(update: Update, context: CallbackContext):
     """Обробляє текстові повідомлення залежно від стану розмови."""
+    text = update.message.text
+    if "editing_course_id" in context.user_data:
+        course_id = context.user_data.pop("editing_course_id")
+        new_name = text
+        # update_course_name(course_id, new_name) — приклад виклику функції
+        await update.message.reply_text(f"✅ Назву курсу ID {course_id} оновлено на: {new_name}")
+        return
 
     if update.message.text == "/cancel":
         context.user_data.clear()
@@ -210,7 +219,6 @@ async def message_handler(update: Update, context: CallbackContext):
         announcement_text = update.message.text
         await send_announcement(update, context)
         return
-
 
     elif state == WAITING_FOR_SCAN_LINK:
 

@@ -21,6 +21,9 @@ def main():
 
     register_faq_handlers(application)
 
+    application.add_handler(CallbackQueryHandler(course_callback_handler, pattern="^teachercourse_"))
+
+
     # Важливо: спочатку реєструємо обробники з точнішими шаблонами
     application.add_handler(CallbackQueryHandler(edit_field_handler, pattern=r"^edit_[a-z]+_\w+$"))
     application.add_handler(CallbackQueryHandler(edit_user_handler, pattern=r"^edit_\w+$"))

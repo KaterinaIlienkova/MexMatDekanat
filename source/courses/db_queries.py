@@ -1,7 +1,11 @@
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 from sqlalchemy import select, join
 from typing import List, Dict, Any
+import logging
 
+
+logger = logging.getLogger(__name__)
 from source.models import Course, Teacher, User, Student, CourseEnrollment
 
 
@@ -165,3 +169,46 @@ def get_course_students(course_id: int, session: Session) -> List[Dict[str, Any]
     except Exception as e:
         print(f"Помилка при отриманні студентів на курсі: {str(e)}")
         return []
+
+def add_new_course(session: Session, course_name: str, platform: str, link: str, teacher_id: int) -> bool:
+    """Додає новий курс до бази даних."""
+    try:
+        new_course = Course(
+            Name=course_name,
+            StudyPlatform=platform,
+            MeetingLink=link,
+            TeacherID=teacher_id,
+            IsActive=True
+        )
+        session.add(new_course)
+        session.commit()
+        return True
+    except SQLAlchemyError as e:
+        logger.exception(f"Помилка при додаванні курсу: {e}")
+        session.rollback()
+        return False
+
+def deactivate_course_by_id(session: Session, course_id: int) -> tuple[bool, str]:
+    """Деактивує курс за його ID та повертає статус і назву."""
+    try:
+        course = session.query(Course).filter(Course.CourseID == course_id).first()
+        if course:
+            course.IsActive = False
+            session.commit()
+            return True, course.Name
+        return False, ""
+    except SQLAlchemyError as e:
+        logger.exception(f"Помилка при деактивації курсу: {e}")
+        session.rollback()
+        return False, ""
+
+
+
+def get_teacher_id_by_username(session: Session, username: str) -> int:
+    """Отримує ID викладача за телеграм-тегом."""
+    try:
+        teacher = session.query(Teacher).join(User).filter(User.TelegramTag == username).first()
+        return teacher.TeacherID if teacher else None
+    except SQLAlchemyError as e:
+        logger.exception(f"Помилка при отриманні ID викладача: {e}")
+        return None
