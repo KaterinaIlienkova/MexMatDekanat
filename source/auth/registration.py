@@ -85,9 +85,9 @@ async def start(update: Update, context: CallbackContext):
         return  # Виходимо, якщо користувач не зареєстрований
 
     if role == "dean_office":
-        keyboard = [[KeyboardButton("Інструкції"), KeyboardButton("Додати користувача"),
-                     KeyboardButton("Редагувати Q&A"), KeyboardButton("Оголошення"),
-                     KeyboardButton("Підтвердити реєстрацію"), KeyboardButton("Заявки на документи")]]
+        keyboard = [[KeyboardButton("Інструкції"), KeyboardButton("Додати користувача")],
+                    [KeyboardButton("Редагувати Q&A"), KeyboardButton("Оголошення")],
+                     [KeyboardButton("Підтвердити реєстрацію"), KeyboardButton("Заявки на документи")]]
     elif role == "student":
         keyboard = [[KeyboardButton("Q&A")],[KeyboardButton("Мої поточні курси")],[KeyboardButton("Замовити документ")]]  # Q&A на панельці для студентів
     elif role == "teacher":
