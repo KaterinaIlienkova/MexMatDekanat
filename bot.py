@@ -1,59 +1,83 @@
-from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters
-from source.announcements.publication import announcement_selector_handler
-from source.auth.registration import start, confirm_callback_handler, confirm_command, confirm, delete_user_handler, \
-    get_groups_list, edit_user_handler, register_edit_handlers, edit_field_handler
-from source.config import BOT_TOKEN
-from source.courses.handlers import course_callback_handler, back_to_courses_handler
-from source.documents.db_queries import confirm_document_request
-from source.documents.handlers import doc_request, select_document, cancel_document_request, handle_doc_request, \
-    reject_document_request, process_document_request
-from source.faq.handlers import register_faq_handlers
-from source.utils import message_handler
+from telegram.ext import ApplicationBuilder
+
+from source.config import DB_CONFIG, BOT_TOKEN
+from source.controllers.AnnouncementController import AnnouncementController
+from source.controllers.AuthController import AuthController
+from source.controllers.CourseController import CourseController
+from source.controllers.DocumentController import DocumentController
+from source.controllers.FAQController import FAQController
+from source.controllers.MenuController import MenuController
+from source.database import DatabaseManager
+from source.repositories.AnnouncementRepository import AnnouncementRepository
+from source.repositories.AuthRepository import AuthRepository
+from source.repositories.CourseRepository import CourseRepository
+from source.repositories.DocumentRequestRepository import DocumentRequestRepository
+from source.repositories.DocumentTypeRepository import DocumentTypeRepository
+from source.repositories.FAQRepository import FAQRepository
+from source.services.AnnouncementService import AnnouncementService
+from source.services.AuthService import AuthService
+from source.services.CourseService import CourseService
+from source.services.DocumentService import DocumentService
+from source.services.FAQService import FAQService
+
+
+def setup_document_service(db_manager):
+
+    document_type_repo = DocumentTypeRepository(db_manager.get_session)
+    document_request_repo = DocumentRequestRepository(db_manager.get_session)
+    auth_repository = AuthRepository(db_manager.get_session)
+
+    document_service = DocumentService(auth_repository, document_type_repo, document_request_repo)
+
+    return document_service
+
+def setup_faq_service(db_manager):
+    """Налаштовує сервіс FAQ."""
+    faq_repository = FAQRepository(db_manager.get_session)
+    faq_service = FAQService(faq_repository)
+
+    return faq_service
+
+def setup_course_service(db_manager):
+    """Налаштовує сервіс FAQ."""
+    course_repository = CourseRepository(db_manager.get_session)
+    course_service = CourseService(course_repository)
+
+    return course_service
+
+
+def setup_auth_service(db_manager):
+    auth_repository = AuthRepository(db_manager.get_session)
+    auth_service=AuthService(auth_repository)
+    return  auth_service
+
+
+def setup_announcement_service(db_manager):
+    announcement_repository = AnnouncementRepository(db_manager.get_session)
+    announcement_service = AnnouncementService(announcement_repository)
+    return announcement_service
+
+
 def main():
-    # Створюємо об'єкт додатку
-    application = Application.builder().token(BOT_TOKEN).build()
+    application = ApplicationBuilder().token(BOT_TOKEN).build()
 
-    # Додаємо обробники команд
-    application.add_handler(CommandHandler("start", start))
+    db_manager = DatabaseManager(DB_CONFIG)
 
-    # Обробник повідомлень
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message_handler))
+    document_service = setup_document_service(db_manager)
+    faq_service = setup_faq_service(db_manager)
+    course_service = setup_course_service(db_manager)
+    auth_service = setup_auth_service(db_manager)
+    announcement_service=setup_announcement_service(db_manager)
 
-    register_faq_handlers(application)
+    document_controller = DocumentController(application, document_service)
+    faq_controller = FAQController(application, faq_service)
+    course_controller = CourseController(application,course_service)
+    auth_controller= AuthController(application,auth_service)
+    announcement_controller = AnnouncementController(application,announcement_service)
 
-    application.add_handler(CallbackQueryHandler(course_callback_handler, pattern="^teachercourse_"))
+    menu_controller = MenuController(application, document_controller, faq_controller, course_controller,auth_controller, announcement_controller)
+    menu_controller.register_handlers()
 
-
-    # Важливо: спочатку реєструємо обробники з точнішими шаблонами
-    application.add_handler(CallbackQueryHandler(edit_field_handler, pattern=r"^edit_[a-z]+_\w+$"))
-    application.add_handler(CallbackQueryHandler(edit_user_handler, pattern=r"^edit_\w+$"))
-
-    # Обробник підтвердження реєстрації
-    application.add_handler(CallbackQueryHandler(confirm_callback_handler, pattern=r"^confirm_|cancel_"))
-
-    # Обробник видалення заявки
-    application.add_handler(CallbackQueryHandler(delete_user_handler, pattern=r"^delete_"))
-
-    # Загальні обробники оголошень
-    application.add_handler(CallbackQueryHandler(announcement_selector_handler, pattern="^(announce_to_|course_|dept_|group_|teacher_|show_|back_to_|cancel_)"))
-
-    # Реєстрація обробників команд
-    application.add_handler(CommandHandler("confirm", confirm_command))
-    application.add_handler(CommandHandler("groups", get_groups_list))
-    application.add_handler(MessageHandler(filters.Regex("^Підтвердити реєстрацію$"), confirm))
-    application.add_handler(CallbackQueryHandler(back_to_courses_handler, pattern="^back_teachercourses$"))
-    application.add_handler(CallbackQueryHandler(course_callback_handler, pattern="^teachercourse_"))
-
-    application.add_handler(CommandHandler('doc_request', doc_request))
-    application.add_handler(CallbackQueryHandler(select_document, pattern='^doc_select_'))
-    application.add_handler(CallbackQueryHandler(confirm_document_request, pattern='^doc_confirm_'))
-    application.add_handler(CallbackQueryHandler(cancel_document_request, pattern='^cancel_doc$'))
-
-    application.add_handler(CallbackQueryHandler(handle_doc_request, pattern="^handle_request_"))
-    application.add_handler(CallbackQueryHandler(reject_document_request, pattern="^reject_doc_"))
-    application.add_handler(CallbackQueryHandler(process_document_request, pattern="^process_doc_"))
-
-    # Запуск бота
     application.run_polling()
 
 if __name__ == "__main__":
