@@ -9,6 +9,7 @@ from source.models import CourseEnrollment, StudentGroup, User, Student, Course,
 # Налаштування логера
 logger = logging.getLogger(__name__)
 
+
 class AnnouncementRepository:
     def __init__(self, get_session):
         self.get_session = get_session
