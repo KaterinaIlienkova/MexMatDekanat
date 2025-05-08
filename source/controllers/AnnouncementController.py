@@ -1,3 +1,4 @@
+import telegram
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     CallbackContext,
@@ -460,19 +461,26 @@ class AnnouncementController:
         return self.WAITING_FOR_ANNOUNCEMENT_CONFIRMATION
 
     async def handle_process_photo_and_video(self, update: Update, context: CallbackContext) -> int:
-        logger.info(f"DATA {update.message.photo}")
-        logger.info(f"DATA VIDEO {update.message.video}")
-
         context.user_data['announcement_photo'] = defaultdict(dict)
-        context.user_data['announcement_data']['text'] = update.message.caption
+        context.user_data['announcement_data']['text'] = update.message.caption or ""
 
         if update.message.photo:
             context.user_data['announcement_photo']['photo'] = update.message.photo
-        else:
+            context.user_data['announcement_data']['media_type'] = 'photo'
+
+            logger.info(f"Saved photo {update.message.photo[-1].file_id}")
+
+        elif update.message.video:
             context.user_data['announcement_photo']['video'] = update.message.video
+            context.user_data['announcement_data']['media_type'] = 'video'
+            logger.info(f"Сохранено видео. ID: {update.message.video.file_id}")
+
+        else:
+            logger.warning("Получено сообщение без фото или видео")
+            context.user_data['announcement_data']['media_type'] = None
 
         recipient_type = context.user_data['announcement_data']['recipient_type']
-        recipients_count = context.user_data['announcement_data']['recipients_count']
+        recipients_count = context.user_data['announcement_data'].get('recipients_count', '???')
 
         confirmation_message = "Підтвердіть відправку оголошення:\n\n"
         confirmation_message += f"Отримувачі: {self._get_recipient_type_name(recipient_type)}"
@@ -481,22 +489,33 @@ class AnnouncementController:
             confirmation_message += f" - {context.user_data['announcement_data']['target_name']}"
 
         confirmation_message += f"\nКількість отримувачів: {recipients_count}\n\n"
-        confirmation_message += f"Текст оголошення:\n{update.message.caption}"
+        confirmation_message += f"Текст оголошення:\n{update.message.caption or '(без тексту)'}"
 
         keyboard = [
             [InlineKeyboardButton("✅ Підтвердити і надіслати", callback_data="confirm_send")],
             [InlineKeyboardButton("❌ Скасувати", callback_data="cancel_send")]
         ]
-
         reply_markup = InlineKeyboardMarkup(keyboard)
 
-        await update.message.reply_text(
-            confirmation_message,
-            reply_markup=reply_markup
-        )
+        if update.message.photo:
+            await update.message.reply_photo(
+                photo=update.message.photo[-1].file_id,
+                caption=confirmation_message,
+                reply_markup=reply_markup
+            )
+        elif update.message.video:
+            await update.message.reply_video(
+                video=update.message.video.file_id,
+                caption=confirmation_message,
+                reply_markup=reply_markup
+            )
+        else:
+            await update.message.reply_text(
+                confirmation_message,
+                reply_markup=reply_markup
+            )
 
         return self.WAITING_FOR_ANNOUNCEMENT_CONFIRMATION
-
 
     async def send_announcement(self, update: Update, context: CallbackContext) -> int:
         """Відправляє оголошення вибраним отримувачам."""
@@ -504,67 +523,78 @@ class AnnouncementController:
         await query.answer()
 
         data = context.user_data['announcement_data']
+        photo_data = context.user_data.get('announcement_photo', {})
+
         recipient_type = data['recipient_type']
         message_text = data['text']
         bot = context.bot
+        media_type = data.get('media_type')
+        media_content = None
 
-        # Відправляємо повідомлення залежно від типу отримувачів
+        if media_type == 'photo' and 'photo' in photo_data:
+            media_content = photo_data['photo'][-1].file_id
+            logger.info(f"Отправка фото с ID: {media_content}")
+        elif media_type == 'video' and 'video' in photo_data:
+            media_content = photo_data['video'].file_id
+            logger.info(f"Отправка видео с ID: {media_content}")
+
         try:
             if recipient_type == "all_teachers":
-                success_count, fail_count = await self.announcement_service.send_to_all_teachers(message_text, bot)
+                success_count, fail_count = await self.announcement_service.send_to_all_teachers(
+                    message_text, bot, media_type=media_type, media_content=media_content)
 
             elif recipient_type == "department_teachers":
                 success_count, fail_count = await self.announcement_service.send_to_department_teachers(
-                    data['target_id'], message_text, bot
-                )
+                    data['target_id'], message_text, bot, media_type=media_type, media_content=media_content)
 
             elif recipient_type == "specific_teachers":
                 success_count, fail_count = await self.announcement_service.send_to_specific_teachers(
-                    data['teacher_ids'], message_text, bot
-                )
+                    data['teacher_ids'], message_text, bot, media_type=media_type, media_content=media_content)
 
             elif recipient_type == "all_students":
-                success_count, fail_count = await self.announcement_service.send_to_all_students(message_text, bot)
+                success_count, fail_count = await self.announcement_service.send_to_all_students(
+                    message_text, bot, media_type=media_type, media_content=media_content)
 
             elif recipient_type == "group_students":
                 success_count, fail_count = await self.announcement_service.send_to_group_students(
-                    data['target_id'], message_text, bot
-                )
+                    data['target_id'], message_text, bot, media_type=media_type, media_content=media_content)
 
             elif recipient_type == "specialty_students":
                 success_count, fail_count = await self.announcement_service.send_to_specialty_students(
-                    data['target_id'], message_text, bot
-                )
+                    data['target_id'], message_text, bot, media_type=media_type, media_content=media_content)
 
             elif recipient_type == "course_year_students":
                 success_count, fail_count = await self.announcement_service.send_to_course_year_students(
-                    data['target_id'], message_text, bot
-                )
+                    data['target_id'], message_text, bot, media_type=media_type, media_content=media_content)
 
             elif recipient_type == "course_enrollment_students":
                 success_count, fail_count = await self.announcement_service.send_to_course_enrollment_students(
-                    data['target_id'], message_text, bot
-                )
+                    data['target_id'], message_text, bot, media_type=media_type, media_content=media_content)
 
             elif recipient_type == "specific_students":
                 success_count, fail_count = await self.announcement_service.send_to_specific_students(
-                    data['student_ids'], message_text, bot
-                )
+                    data['student_ids'], message_text, bot, media_type=media_type, media_content=media_content)
 
             result_message = (
                 f"✅ Оголошення надіслано успішно!\n"
                 f"Успішно доставлено: {success_count}\n"
                 f"Помилок доставки: {fail_count}"
             )
-
         except Exception as e:
             logger.error(f"Помилка при відправці оголошення: {e}")
             result_message = f"❌ Сталася помилка при відправці оголошення: {str(e)}"
 
         # Очищаємо дані
         context.user_data.pop('announcement_data', None)
+        context.user_data.pop('announcement_photo', None)
 
-        await query.edit_message_text(result_message)
+        if query.message.photo:
+            await query.message.edit_caption(caption=result_message)
+        elif query.message.video:
+            await query.message.edit_caption(caption=result_message)
+        else:
+            await query.message.edit_text(result_message)
+
         return ConversationHandler.END
 
 
