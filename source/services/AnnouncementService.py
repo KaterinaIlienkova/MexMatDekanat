@@ -6,6 +6,7 @@ from source.repositories import AnnouncementRepository
 
 logger = logging.getLogger(__name__)
 
+
 class AnnouncementService:
     def __init__(self, announcement_repository: AnnouncementRepository):
         self.announcement_repository = announcement_repository
@@ -24,6 +25,7 @@ class AnnouncementService:
         """
         success_count = 0
         fail_count = 0
+        logger.info(f"TYPE OF MESSAGE {message}")
 
         for chat_id in chat_ids:
             try:

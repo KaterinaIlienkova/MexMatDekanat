@@ -3,13 +3,12 @@ import logging
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import CallbackContext, CommandHandler, MessageHandler, CallbackQueryHandler, ConversationHandler, \
     filters
-
+from telegram.ext import ContextTypes
 from source.services import AuthService
 
 logger = logging.getLogger(__name__)
 
 
-from telegram.ext import ContextTypes
 class AuthController:
 
     WAITING_FOR_USER_DETAILS = "WAITING_FOR_USER_DETAILS"
@@ -323,6 +322,7 @@ class AuthController:
         context.user_data.clear()
 
         return ConversationHandler.END
+
     async def check_registration(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> str | None:
         """Перевіряє реєстрацію користувача при вході в бот."""
         user = update.effective_user

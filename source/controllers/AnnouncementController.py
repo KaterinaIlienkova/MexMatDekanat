@@ -7,10 +7,12 @@ from telegram.ext import (
     CallbackQueryHandler,
     filters
 )
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any
+from collections import defaultdict
 import logging
 
 logger = logging.getLogger(__name__)
+
 
 class AnnouncementController:
     def __init__(self, application, announcement_service):
@@ -44,7 +46,9 @@ class AnnouncementController:
                         CallbackQueryHandler(self.finish_recipient_selection, pattern="^finish_selection$")
                     ],
                     self.WAITING_FOR_ANNOUNCEMENT_TEXT: [
-                        MessageHandler(filters.TEXT & ~filters.COMMAND, self.process_announcement_text)
+                        MessageHandler(filters.TEXT & ~filters.COMMAND, self.process_announcement_text),
+                        MessageHandler(filters.PHOTO, self.handle_process_photo_and_video),
+                        MessageHandler(filters.VIDEO, self.handle_process_photo_and_video)
                     ],
                     self.WAITING_FOR_ANNOUNCEMENT_CONFIRMATION: [
                         CallbackQueryHandler(self.send_announcement, pattern="^confirm_send$"),
@@ -418,6 +422,7 @@ class AnnouncementController:
 
     async def process_announcement_text(self, update: Update, context: CallbackContext) -> int:
         """Обробляє введений текст оголошення."""
+        logger.info(f"MESSAGE FROM ANNOUNCMENT {update.message}")
         announcement_text = update.message.text.strip()
 
         if not announcement_text:
@@ -453,6 +458,45 @@ class AnnouncementController:
         )
 
         return self.WAITING_FOR_ANNOUNCEMENT_CONFIRMATION
+
+    async def handle_process_photo_and_video(self, update: Update, context: CallbackContext) -> int:
+        logger.info(f"DATA {update.message.photo}")
+        logger.info(f"DATA VIDEO {update.message.video}")
+
+        context.user_data['announcement_photo'] = defaultdict(dict)
+        context.user_data['announcement_data']['text'] = update.message.caption
+
+        if update.message.photo:
+            context.user_data['announcement_photo']['photo'] = update.message.photo
+        else:
+            context.user_data['announcement_photo']['video'] = update.message.video
+
+        recipient_type = context.user_data['announcement_data']['recipient_type']
+        recipients_count = context.user_data['announcement_data']['recipients_count']
+
+        confirmation_message = "Підтвердіть відправку оголошення:\n\n"
+        confirmation_message += f"Отримувачі: {self._get_recipient_type_name(recipient_type)}"
+
+        if 'target_name' in context.user_data['announcement_data']:
+            confirmation_message += f" - {context.user_data['announcement_data']['target_name']}"
+
+        confirmation_message += f"\nКількість отримувачів: {recipients_count}\n\n"
+        confirmation_message += f"Текст оголошення:\n{update.message.caption}"
+
+        keyboard = [
+            [InlineKeyboardButton("✅ Підтвердити і надіслати", callback_data="confirm_send")],
+            [InlineKeyboardButton("❌ Скасувати", callback_data="cancel_send")]
+        ]
+
+        reply_markup = InlineKeyboardMarkup(keyboard)
+
+        await update.message.reply_text(
+            confirmation_message,
+            reply_markup=reply_markup
+        )
+
+        return self.WAITING_FOR_ANNOUNCEMENT_CONFIRMATION
+
 
     async def send_announcement(self, update: Update, context: CallbackContext) -> int:
         """Відправляє оголошення вибраним отримувачам."""

@@ -2,6 +2,9 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
 from source.config import DB_CONFIG
 
+
+Base = declarative_base()
+
 # DATABASE_URL = (f"mysql+pymysql://{DB_CONFIG['user']}:{DB_CONFIG['password']}"
 #                 f"@{DB_CONFIG['host']}:{DB_CONFIG['port']}/{DB_CONFIG['database']}")
 #
@@ -9,6 +12,7 @@ from source.config import DB_CONFIG
 # SessionLocal = sessionmaker(bind=engine)
 #
 # Base=declarative_base()
+
 
 class DatabaseManager:
     """Handles database connections and provides basic session management"""
@@ -25,6 +29,7 @@ class DatabaseManager:
                         f"@{self.config['host']}:{self.config['port']}/{self.config['database']}")
         self.engine = create_engine(database_url, pool_recycle=1800, pool_pre_ping=True)
         self.session_factory = sessionmaker(bind=self.engine)
+        Base.metadata.create_all(self.engine)
 
     def get_session(self):
         """Returns a new database session"""

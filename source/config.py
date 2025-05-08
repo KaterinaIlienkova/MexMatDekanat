@@ -19,8 +19,10 @@ WAITING_FOR_SCAN_LINK = "waiting_for_scan_link"
 WAITING_FOR_EDIT_FIELD = "waiting_for_edit_field"
 
 
-
+# ToDo this token for Kate
 BOT_TOKEN = "7946045090:AAGz4mbCcE_TC8CIcDuh4jQsgZgBSdGgi5g"
+
+# BOT_TOKEN = "7772798101:AAEBa5iofwkbJD8nzBdFbwPl2D7mmUGbtEY"
 
 DB_CONFIG = {
     "user": "root",

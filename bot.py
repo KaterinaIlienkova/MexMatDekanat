@@ -38,6 +38,7 @@ def setup_faq_service(db_manager):
 
     return faq_service
 
+
 def setup_course_service(db_manager):
     """Налаштовує сервіс FAQ."""
     course_repository = CourseRepository(db_manager.get_session)
@@ -48,8 +49,8 @@ def setup_course_service(db_manager):
 
 def setup_auth_service(db_manager):
     auth_repository = AuthRepository(db_manager.get_session)
-    auth_service=AuthService(auth_repository)
-    return  auth_service
+    auth_service = AuthService(auth_repository)
+    return auth_service
 
 
 def setup_announcement_service(db_manager):
@@ -67,18 +68,19 @@ def main():
     faq_service = setup_faq_service(db_manager)
     course_service = setup_course_service(db_manager)
     auth_service = setup_auth_service(db_manager)
-    announcement_service=setup_announcement_service(db_manager)
+    announcement_service = setup_announcement_service(db_manager)
 
     document_controller = DocumentController(application, document_service)
     faq_controller = FAQController(application, faq_service)
-    course_controller = CourseController(application,course_service)
-    auth_controller= AuthController(application,auth_service)
-    announcement_controller = AnnouncementController(application,announcement_service)
+    course_controller = CourseController(application, course_service)
+    auth_controller = AuthController(application, auth_service)
+    announcement_controller = AnnouncementController(application, announcement_service)
 
-    menu_controller = MenuController(application, document_controller, faq_controller, course_controller,auth_controller, announcement_controller)
+    menu_controller = MenuController(application, document_controller, faq_controller, course_controller, auth_controller, announcement_controller)
     menu_controller.register_handlers()
 
     application.run_polling()
+
 
 if __name__ == "__main__":
     main()
