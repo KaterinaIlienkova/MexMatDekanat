@@ -21,7 +21,7 @@ class AuthRepository:
     def get_user_by_chat_id(self, chat_id: int) -> User | None:
         try:
             with self.get_session() as session:
-                return session.query(User).filter_by(chat_id=chat_id).first()
+                return session.query(User).filter_by(ChatID=chat_id).first()
         except SQLAlchemyError as e:
             logger.error(f"Database error when fetching user by chat_id: {e}")
             return None

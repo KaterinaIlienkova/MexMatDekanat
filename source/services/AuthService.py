@@ -291,4 +291,6 @@ class AuthService:
         """Отримує детальну інформацію про користувача."""
         return self.auth_repository.get_user_info(user_id)
 
+    async def get_user_by_chat_id(self,chat_id):
+        return self.auth_repository.get_user_by_chat_id(chat_id)
 

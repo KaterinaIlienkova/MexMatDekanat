@@ -4,7 +4,7 @@ from telegram.ext import CallbackContext, CommandHandler, MessageHandler, filter
 from source.controllers.BaseController import BaseController
 
 class MenuController(BaseController):
-    def __init__(self, application,document_controller,faq_controller,course_controller,auth_controller,announcement_controller ):
+    def __init__(self, application,document_controller,faq_controller,course_controller,auth_controller,announcement_controller, pqa_controller ):
         super().__init__(application)
         self.button_handlers = {}
         self.document_controller = document_controller
@@ -12,12 +12,15 @@ class MenuController(BaseController):
         self.course_controller = course_controller
         self.auth_controller = auth_controller
         self.announcement_controller = announcement_controller
+        self.pqa_controller = pqa_controller
 
     def register_handlers(self):
         self.button_handlers = {
             "Додати користувача": self.auth_controller.add_user,
             "Видалити користувача": self.auth_controller.delete_user,
             "Q&A": self.faq_controller.send_qa,
+            "Поставити питання": self.pqa_controller.start_question_creation,
+            "Персональні питання студентів": self.pqa_controller.view_student_questions,
             "Редагувати Q&A": self.faq_controller.show_edit_qa_options,
             "Оголошення": self.announcement_controller.start_announcement,
             "Підтвердити реєстрацію": self.auth_controller.view_registration_requests,
@@ -33,6 +36,9 @@ class MenuController(BaseController):
 
         # Register announcement controller handlers
         for handler in self.announcement_controller.register_handlers():
+            self.application.add_handler(handler)
+
+        for handler in self.pqa_controller.register_handlers():
             self.application.add_handler(handler)
 
         for handler in self.auth_controller.register_handlers():
@@ -68,10 +74,11 @@ class MenuController(BaseController):
             "dean_office": [
                 [KeyboardButton("Додати користувача"), KeyboardButton("Видалити користувача")],
                 [KeyboardButton("Редагувати Q&A"), KeyboardButton("Оголошення")],
-                [KeyboardButton("Підтвердити реєстрацію"), KeyboardButton("Заявки на документи")]
+                [KeyboardButton("Підтвердити реєстрацію"), KeyboardButton("Заявки на документи")],
+                [KeyboardButton("Персональні питання студентів")]
             ],
             "student": [
-                [KeyboardButton("Q&A")],
+                [KeyboardButton("Q&A"),KeyboardButton("Поставити питання")],
                 [KeyboardButton("Мої поточні курси")],
                 [KeyboardButton("Замовити документ")]
             ],
