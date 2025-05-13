@@ -1,7 +1,8 @@
 from datetime import datetime
 from sqlalchemy import desc, func
 from typing import List, Optional, Tuple
-from source.models import PersonalQuestion, User
+from source.models import PersonalQuestion, User, StudentGroup, Student
+
 
 class PersonalQARepository:
     def __init__(self, get_session):
@@ -32,168 +33,101 @@ class PersonalQARepository:
             session.commit()
             return new_question.QuestionID
 
-    def get_user_questions(self, user_id: int) -> List[dict]:
-        """
-        Отримує всі запитання конкретного користувача.
-
-        Args:
-            user_id: ID користувача
-
-        Returns:
-            Список запитань користувача з їх статусом та відповідями
-        """
-
-
-        with self.get_session() as session:
-            questions = session.query(
-                PersonalQuestion,
-                User.UserName.label('answered_by_name')
-            ).outerjoin(
-                User,
-                PersonalQuestion.AnsweredBy == User.UserID
-            ).filter(
-                PersonalQuestion.UserID == user_id
-            ).order_by(
-                desc(PersonalQuestion.Timestamp)
-            ).all()
-
-            result = []
-            for q, answered_by in questions:
-                result.append({
-                    'question_id': q.QuestionID,
-                    'question': q.Question,
-                    'answer': q.Answer,
-                    'status': q.Status,
-                    'timestamp': q.Timestamp,
-                    'answered_by': answered_by
-                })
-
-            return result
-
     # Методи для працівників деканату
-    def get_pending_questions(self, limit: int = 50, offset: int = 0) -> Tuple[List[dict], int]:
+    def get_pending_questions(self):
         """
-        Отримує список невідповідених запитань.
-
-        Args:
-            limit: Максимальна кількість запитань для повернення
-            offset: Зміщення для пагінації
+        Отримує список всіх невідповідених запитань.
 
         Returns:
-            Кортеж (список запитань, загальна кількість)
+            Список об'єктів PersonalQuestion зі статусом 'pending'
         """
-
-
         with self.get_session() as session:
-            # Отримуємо загальну кількість запитань зі статусом 'pending'
-            total_count = session.query(func.count(PersonalQuestion.QuestionID)) \
-                .filter(PersonalQuestion.Status == 'pending') \
-                .scalar()
+            pending_questions = session.query(PersonalQuestion).filter_by(Status='pending').all()
+            return pending_questions
 
-            # Отримуємо запитання з обмеженням та зміщенням
-            pending_questions = session.query(
-                PersonalQuestion,
-                User.UserName.label('student_name'),
-                User.TelegramTag.label('student_telegram')
-            ).join(
-                User,
-                PersonalQuestion.UserID == User.UserID
-            ).filter(
-                PersonalQuestion.Status == 'pending'
-            ).order_by(
-                PersonalQuestion.Timestamp
-            ).limit(limit).offset(offset).all()
-
-            result = []
-            for q, student_name, student_telegram in pending_questions:
-                result.append({
-                    'question_id': q.QuestionID,
-                    'student_id': q.UserID,
-                    'student_name': student_name,
-                    'student_telegram': student_telegram,
-                    'question': q.Question,
-                    'timestamp': q.Timestamp
-                })
-
-            return result, total_count
-
-    def answer_question(self, question_id: int, staff_id: int, answer_text: str) -> bool:
+    def get_question_details(self, question_id: int):
         """
-        Відповідає на запитання студента.
-
-        Args:
-            question_id: ID запитання
-            staff_id: ID працівника деканату, який відповідає
-            answer_text: Текст відповіді
-
-        Returns:
-            True якщо відповідь успішно збережена, False в іншому випадку
-        """
-
-
-        with self.get_session() as session:
-            question = session.query(PersonalQuestion) \
-                .filter(PersonalQuestion.QuestionID == question_id) \
-                .first()
-
-            if not question or question.Status != 'pending':
-                return False
-
-            question.Answer = answer_text
-            question.Status = 'answered'
-            question.AnsweredBy = staff_id
-            session.commit()
-            return True
-
-    def get_question_details(self, question_id: int) -> Optional[dict]:
-        """
-        Отримує детальну інформацію про конкретне запитання.
+        Отримує детальну інформацію про запитання, включаючи дані про студента.
 
         Args:
             question_id: ID запитання
 
         Returns:
-            Деталі запитання або None, якщо запитання не знайдено
+            Словник з інформацією про запитання та студента
         """
-
-
         with self.get_session() as session:
-            result = session.query(
-                PersonalQuestion,
-                User.UserName.label('student_name'),
-                User.TelegramTag.label('student_telegram'),
-                User.ChatID.label('student_chat_id')
-            ).join(
-                User,
-                PersonalQuestion.UserID == User.UserID
-            ).filter(
-                PersonalQuestion.QuestionID == question_id
-            ).first()
+            question = session.query(PersonalQuestion).filter_by(QuestionID=question_id).first()
 
-            if not result:
+            if not question:
                 return None
 
-            question, student_name, student_telegram, student_chat_id = result
+            # Отримуємо інформацію про користувача
+            user = session.query(User).filter_by(UserID=question.UserID).first()
 
-            # Отримуємо інформацію про працівника, який відповів (якщо є)
-            answered_by_name = None
-            if question.AnsweredBy:
-                staff = session.query(User.UserName) \
-                    .filter(User.UserID == question.AnsweredBy) \
-                    .first()
-                if staff:
-                    answered_by_name = staff[0]
+            # Якщо це студент, отримуємо додаткову інформацію
+            student_info = None
+            if user and user.Role == 'student':
+                student = session.query(Student).filter_by(UserID=user.UserID).first()
+                if student:
+                    group = session.query(StudentGroup).filter_by(GroupID=student.GroupID).first()
+                    student_info = {
+                        'student_id': student.StudentID,
+                        'group_name': group.GroupName if group else 'Невідома група'
+                    }
 
             return {
-                'question_id': question.QuestionID,
-                'student_id': question.UserID,
-                'student_name': student_name,
-                'student_telegram': student_telegram,
-                'student_chat_id': student_chat_id,
-                'question': question.Question,
-                'answer': question.Answer,
-                'status': question.Status,
-                'timestamp': question.Timestamp,
-                'answered_by_id': question.AnsweredBy,
-                'answered_by_name': answered_by_name
+                'question': question,
+                'user': user,
+                'student_info': student_info
             }
+
+    def answer_question(self, question_id: int, answer_text: str, answered_by_id: int):
+        """
+        Зберігає відповідь на запитання та змінює його статус.
+
+        Args:
+            question_id: ID запитання
+            answer_text: Текст відповіді
+            answered_by_id: ID користувача, який відповідає
+
+        Returns:
+            True у разі успіху, False у разі невдачі
+        """
+        try:
+            with self.get_session() as session:
+                question = session.query(PersonalQuestion).filter_by(QuestionID=question_id).first()
+
+                if not question:
+                    return False
+
+                question.Answer = answer_text
+                question.Status = 'answered'
+                question.AnsweredBy = answered_by_id
+
+                session.commit()
+                return True
+        except Exception:
+            return False
+
+    def get_student_chat_id(self, question_id: int):
+        """
+        Отримує chat_id студента, який задав запитання, для відправки йому відповіді.
+
+        Args:
+            question_id: ID запитання
+
+        Returns:
+            chat_id студента або None
+        """
+        with self.get_session() as session:
+            question = session.query(PersonalQuestion).filter_by(QuestionID=question_id).first()
+
+            if not question:
+                return None
+
+            user = session.query(User).filter_by(UserID=question.UserID).first()
+
+            if user and user.ChatID:
+                return user.ChatID
+
+            return None

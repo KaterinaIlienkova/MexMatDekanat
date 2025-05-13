@@ -1,6 +1,6 @@
 from sqlalchemy.exc import SQLAlchemyError
 from source.config import logger
-from source.models import Course, Teacher, User, CourseEnrollment, Student
+from source.models import Course, Teacher, User, CourseEnrollment, Student, StudentGroup, Specialty
 
 
 class CourseRepository:
@@ -176,59 +176,6 @@ class CourseRepository:
             logger.exception(f"Помилка при отриманні студентів на курсі: {str(e)}")
             return []
 
-    def add_new_course(self, course_name: str, platform: str, link: str, teacher_id: int) -> bool:
-        """
-        Додає новий курс до бази даних.
-
-        Args:
-            course_name: Назва курсу
-            platform: Платформа для навчання
-            link: Посилання на зустріч
-            teacher_id: ID викладача
-
-        Returns:
-            True, якщо курс успішно додано, інакше False
-        """
-        try:
-            with self.get_session() as session:
-                new_course = Course(
-                    Name=course_name,
-                    StudyPlatform=platform,
-                    MeetingLink=link,
-                    TeacherID=teacher_id,
-                    IsActive=True
-                )
-                session.add(new_course)
-                session.commit()
-                return True
-        except SQLAlchemyError as e:
-            logger.exception(f"Помилка при додаванні курсу: {e}")
-            session.rollback()
-            return False
-
-    def deactivate_course(self, course_id: int) -> tuple[bool, str]:
-        """
-        Деактивує курс за його ID та повертає статус і назву.
-
-        Args:
-            course_id: ID курсу для деактивації
-
-        Returns:
-            (успішно, назва_курсу): Кортеж з булевим значенням успіху та назвою курсу
-        """
-        try:
-            with self.get_session() as session:
-                course = session.query(Course).filter(Course.CourseID == course_id).first()
-                if course:
-                    course.IsActive = False
-                    session.commit()
-                    return True, course.Name
-                return False, ""
-        except SQLAlchemyError as e:
-            logger.exception(f"Помилка при деактивації курсу: {e}")
-            session.rollback()
-            return False, ""
-
     def get_teacher_id_by_username(self, username: str) -> int:
         """
         Отримує ID викладача за телеграм-тегом.
@@ -246,3 +193,219 @@ class CourseRepository:
         except SQLAlchemyError as e:
             logger.exception(f"Помилка при отриманні ID викладача: {e}")
             return None
+
+
+    def get_all_student_groups(self) -> list[dict]:
+        """
+        Отримує список всіх груп студентів.
+
+        Returns:
+            Список груп студентів з їх деталями
+        """
+        try:
+            with self.get_session() as session:
+                groups = session.query(
+                    StudentGroup.GroupID,
+                    StudentGroup.GroupName,
+                    Specialty.Name.label("specialty_name")
+                ).join(
+                    Specialty,
+                    StudentGroup.SpecialtyID == Specialty.SpecialtyID,
+                    isouter=True
+                ).all()
+
+                groups_list = []
+                for group in groups:
+                    group_dict = {
+                        "group_id": group.GroupID,
+                        "group_name": group.GroupName,
+                        "specialty": group.specialty_name if group.specialty_name else "Не вказано"
+                    }
+                    groups_list.append(group_dict)
+
+                return groups_list
+        except Exception as e:
+            logger.exception(f"Помилка при отриманні груп студентів: {str(e)}")
+            return []
+
+    def get_all_students_by_group(self, group_id: int) -> list[dict]:
+        """
+        Отримує список всіх студентів з вказаної групи незалежно від їх зарахування на курси.
+
+        Args:
+            group_id: ID групи
+
+        Returns:
+            Список студентів з їх деталями
+        """
+        try:
+            with self.get_session() as session:
+                # Запит для отримання всіх студентів з вказаної групи
+                students = session.query(
+                    Student.StudentID,
+                    User.UserName,
+                    User.TelegramTag,
+                    User.PhoneNumber
+                ).join(
+                    User, Student.UserID == User.UserID
+                ).filter(
+                    Student.GroupID == group_id
+                ).all()
+
+                students_list = []
+                for student in students:
+                    student_dict = {
+                        "student_id": student.StudentID,
+                        "student_name": student.UserName,
+                        "telegram_tag": student.TelegramTag,
+                        "phone_number": student.PhoneNumber or "Не вказано"
+                    }
+                    students_list.append(student_dict)
+
+                return students_list
+        except Exception as e:
+            logger.exception(f"Помилка при отриманні студентів групи: {str(e)}")
+            return []
+
+    def add_student_to_course(self, student_id: int, course_id: int) -> bool:
+        """
+        Додає студента до курсу.
+
+        Args:
+            student_id: ID студента
+            course_id: ID курсу
+
+        Returns:
+            True, якщо студент успішно доданий, інакше False
+        """
+        try:
+            with self.get_session() as session:
+                # Перевіряємо, чи існує вже такий запис
+                existing_enrollment = session.query(CourseEnrollment).filter(
+                    CourseEnrollment.StudentID == student_id,
+                    CourseEnrollment.CourseID == course_id
+                ).first()
+
+                if existing_enrollment:
+                    return False  # Студент вже зарахований на курс
+
+                # Створюємо новий запис
+                new_enrollment = CourseEnrollment(
+                    StudentID=student_id,
+                    CourseID=course_id
+                )
+
+                session.add(new_enrollment)
+                session.commit()
+
+                return True
+        except Exception as e:
+            logger.exception(f"Помилка при додаванні студента до курсу: {str(e)}")
+            return False
+
+    def remove_student_from_course(self, student_id: int, course_id: int) -> bool:
+        """
+        Видаляє студента з курсу.
+
+        Args:
+            student_id: ID студента
+            course_id: ID курсу
+
+        Returns:
+            True, якщо студент успішно видалений, інакше False
+        """
+        try:
+            with self.get_session() as session:
+                # Знаходимо запис про зарахування
+                enrollment = session.query(CourseEnrollment).filter(
+                    CourseEnrollment.StudentID == student_id,
+                    CourseEnrollment.CourseID == course_id
+                ).first()
+
+                if not enrollment:
+                    return False  # Студент не зарахований на курс
+
+                # Видаляємо запис
+                session.delete(enrollment)
+                session.commit()
+
+                return True
+        except Exception as e:
+            logger.exception(f"Помилка при видаленні студента з курсу: {str(e)}")
+            return False
+
+    def get_student_id_by_telegram(self, telegram_tag: str) -> int:
+        """
+        Отримує ID студента за його Telegram тегом.
+
+        Args:
+            telegram_tag: Telegram тег студента
+
+        Returns:
+            ID студента або None, якщо студента не знайдено
+        """
+        try:
+            with self.get_session() as session:
+                student = session.query(Student).join(
+                    User, Student.UserID == User.UserID
+                ).filter(
+                    User.TelegramTag == telegram_tag
+                ).first()
+
+                return student.StudentID if student else None
+        except Exception as e:
+            logger.exception(f"Помилка при отриманні ID студента: {str(e)}")
+            return None
+
+
+
+    def create_course(self, teacher_id: int, name: str, study_platform: str = None, meeting_link: str = None) -> int:
+            """
+                Створює новий курс.
+
+                Args:
+                    teacher_id: ID викладача
+                    name: Назва курсу
+                    study_platform: Платформа для навчання (опціонально)
+                    meeting_link: Посилання на зустріч (опціонально)
+
+                Returns:
+                    ID створеного курсу або None у випадку помилки
+                """
+            try:
+                with self.get_session() as session:
+                    new_course = Course(
+                        Name=name,
+                        StudyPlatform=study_platform,
+                        MeetingLink=meeting_link,
+                        TeacherID=teacher_id,
+                        IsActive=True
+                    )
+                    session.add(new_course)
+                    session.commit()
+                    return new_course.CourseID
+            except SQLAlchemyError as e:
+                logger.exception(f"Помилка при створенні курсу: {e}")
+                return None
+
+    def archive_course(self, course_id: int) -> bool:
+        """
+        Архівує курс (встановлює IsActive = False).
+
+        Args:
+            course_id: ID курсу для архівації
+
+        Returns:
+            True якщо архівація пройшла успішно, інакше False
+        """
+        try:
+            with self.get_session() as session:
+                course = session.query(Course).filter(Course.CourseID == course_id).first()
+                if course:
+                    course.IsActive = False
+                    session.commit()
+                    return True
+                return False
+        except SQLAlchemyError as e:
+            logger.exception(f"Помилка при архівації курсу: {e}")
+            return False

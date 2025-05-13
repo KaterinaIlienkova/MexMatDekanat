@@ -27,10 +27,11 @@ class MenuController(BaseController):
             "Мої поточні курси": self.course_controller.view_student_courses,
             "Списки студентів": self.course_controller.view_students,
             "Замовити документ": self.document_controller.request_document,
-            "Заявки на документи": self.document_controller.view_pending_requests
-            # "Курси": self.view_courses, це перегляд, створення нових і т д
+            "Заявки на документи": self.document_controller.view_pending_requests,
+            "Мої курси": self.course_controller.view_teacher_courses
         }
 
+        self.application.add_handler(CommandHandler("start", self.start))
         # Register document controller handlers first
         self.document_controller.register_handlers()
 
@@ -44,9 +45,13 @@ class MenuController(BaseController):
         for handler in self.auth_controller.register_handlers():
             self.application.add_handler(handler)
 
+        course_handlers = self.course_controller.register_handlers()
+        for handler in course_handlers:
+            self.application.add_handler(handler)
+
 
         # Then register menu handlers
-        self.application.add_handler(CommandHandler("start", self.start))
+
         self.application.add_handler(
             MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_message)
         )
@@ -84,7 +89,7 @@ class MenuController(BaseController):
             ],
             "teacher": [
                 [KeyboardButton("Списки студентів")],
-                [KeyboardButton("Курси")]
+                [KeyboardButton("Мої курси")]
             ],
         }
         return keyboards.get(role, [])
@@ -98,6 +103,12 @@ class MenuController(BaseController):
         # Handle document controller scan links
         if context.user_data.get("state") == self.document_controller.WAITING_FOR_SCAN_LINK:
             await self.document_controller.receive_scan_link(update, context)
+            return
+
+            # Перевіряємо, чи обробляємо зараз створення курсу
+        if context.user_data.get("state", "").startswith("waiting_for_"):
+            # Делегуємо обробку CourseController, якщо в процесі створення курсу
+            await self.course_controller.handle_course_creation_input(update, context)
             return
 
         # Handle menu button commands

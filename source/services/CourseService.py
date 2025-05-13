@@ -1,7 +1,10 @@
+from typing import List, Dict, Any
+
+
 class CourseService:
     """Сервіс для роботи з курсами."""
 
-    def __init__(self, course_repository):
+    def __init__(self, course_repository, announce_repository):
         """
         Ініціалізує CourseService.
 
@@ -9,6 +12,7 @@ class CourseService:
             course_repository: Репозиторій для роботи з курсами.
         """
         self.course_repository = course_repository
+        self.announce_repository=announce_repository
 
     def get_student_courses(self, telegram_tag: str, active_only: bool = True) -> list[dict]:
         """
@@ -48,39 +52,6 @@ class CourseService:
         """
         return self.course_repository.get_course_students(course_id)
 
-    def add_course(self, course_name: str, platform: str, link: str, telegram_tag: str) -> bool:
-        """
-        Додає новий курс.
-
-        Args:
-            course_name: Назва курсу
-            platform: Платформа навчання
-            link: Посилання на зустріч
-            telegram_tag: Телеграм тег викладача
-
-        Returns:
-            True якщо курс успішно додано, інакше False
-        """
-        # Знаходимо ID викладача за телеграм-тегом
-        teacher_id = self.course_repository.get_teacher_id_by_username(telegram_tag)
-        if not teacher_id:
-            return False
-
-        # Додаємо курс
-        return self.course_repository.add_new_course(course_name, platform, link, teacher_id)
-
-    def deactivate_course(self, course_id: int) -> tuple[bool, str]:
-        """
-        Деактивує курс за ID.
-
-        Args:
-            course_id: ID курсу для деактивації
-
-        Returns:
-            (успішно, назва_курсу): Кортеж з булевим значенням успіху та назвою курсу
-        """
-        return self.course_repository.deactivate_course(course_id)
-
     def is_teacher(self, telegram_tag: str) -> bool:
         """
         Перевіряє, чи є користувач викладачем.
@@ -92,3 +63,110 @@ class CourseService:
             True якщо користувач є викладачем, інакше False
         """
         return self.course_repository.get_teacher_id_by_username(telegram_tag) is not None
+
+
+
+    def get_all_student_groups(self) -> list[dict]:
+        """
+        Отримує список всіх груп студентів.
+
+        Returns:
+            Список груп студентів з їх деталями
+        """
+        return self.course_repository.get_all_student_groups()
+
+    def get_available_students_for_course(self, group_id: int, course_id: int) -> list[dict]:
+        """
+        Отримує список студентів з вказаної групи, які ще не зараховані на курс.
+
+        Args:
+            group_id: ID групи
+            course_id: ID курсу
+
+        Returns:
+            Список студентів з їх деталями
+        """
+        return self.course_repository.get_available_students_for_course(group_id, course_id)
+
+    def add_student_to_course(self, student_id: int, course_id: int) -> bool:
+        """
+        Додає студента до курсу.
+
+        Args:
+            student_id: ID студента
+            course_id: ID курсу
+
+        Returns:
+            True, якщо студент успішно доданий, інакше False
+        """
+        return self.course_repository.add_student_to_course(student_id, course_id)
+
+    def remove_student_from_course(self, student_id: int, course_id: int) -> bool:
+        """
+        Видаляє студента з курсу.
+
+        Args:
+            student_id: ID студента
+            course_id: ID курсу
+
+        Returns:
+            True, якщо студент успішно видалений, інакше False
+        """
+        return self.course_repository.remove_student_from_course(student_id, course_id)
+
+    def get_student_id_by_telegram(self, telegram_tag: str) -> int:
+        """
+        Отримує ID студента за його Telegram тегом.
+
+        Args:
+            telegram_tag: Telegram тег студента
+
+        Returns:
+            ID студента або None, якщо студента не знайдено
+        """
+        return self.course_repository.get_student_id_by_telegram(telegram_tag)
+
+    def get_all_students_by_group(self, group_id: int) -> List[Dict[str, Any]]:
+        """
+        Отримує всіх студентів конкретної групи незалежно від зарахування на курс.
+
+        Args:
+            group_id: ID групи студентів
+
+        Returns:
+            Список студентів групи з їх деталями
+        """
+        return self.course_repository.get_all_students_by_group(group_id)  # ПРАВИЛЬНА НАЗВА МЕТОДУ
+
+
+
+    def create_course(self, telegram_tag: str, name: str, study_platform: str = None, meeting_link: str = None) -> bool:
+        """
+        Створює новий курс для викладача.
+
+        Args:
+            telegram_tag: Телеграм тег викладача
+            name: Назва курсу
+            study_platform: Платформа для навчання (опціонально)
+            meeting_link: Посилання на зустріч (опціонально)
+
+        Returns:
+            True якщо курс створено успішно, інакше False
+        """
+        teacher_id = self.course_repository.get_teacher_id_by_username(telegram_tag)
+        if not teacher_id:
+            return False
+
+        return self.course_repository.create_course(teacher_id, name, study_platform, meeting_link) is not None
+
+    def archive_course(self, course_id: int) -> bool:
+        """
+        Архівує курс.
+
+        Args:
+            course_id: ID курсу для архівації
+
+        Returns:
+            True якщо архівація пройшла успішно, інакше False
+        """
+        return self.course_repository.archive_course(course_id)

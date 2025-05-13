@@ -44,7 +44,8 @@ def setup_faq_service(db_manager):
 def setup_course_service(db_manager):
     """Налаштовує сервіс FAQ."""
     course_repository = CourseRepository(db_manager.get_session)
-    course_service = CourseService(course_repository)
+    announcement_repository = AnnouncementRepository(db_manager.get_session)
+    course_service = CourseService(course_repository, announcement_repository)
 
     return course_service
 

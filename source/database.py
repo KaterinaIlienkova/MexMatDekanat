@@ -1,6 +1,7 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
 from source.config import DB_CONFIG
+import pymysql
 
 # DATABASE_URL = (f"mysql+pymysql://{DB_CONFIG['user']}:{DB_CONFIG['password']}"
 #                 f"@{DB_CONFIG['host']}:{DB_CONFIG['port']}/{DB_CONFIG['database']}")

@@ -6,11 +6,12 @@ from source.repositories import AnnouncementRepository
 
 logger = logging.getLogger(__name__)
 
+
 class AnnouncementService:
     def __init__(self, announcement_repository: AnnouncementRepository):
         self.announcement_repository = announcement_repository
 
-    async def send_announcement_to_recipients(self, message: str, chat_ids: List[int], bot) -> Tuple[int, int]:
+    async def send_announcement_to_recipients(self, message: str, chat_ids: List[str], bot, media_type=None, media_content=None) -> Tuple[int, int]:
         """
         Надсилає оголошення всім отримувачам з переліку chat_ids.
 
@@ -25,14 +26,42 @@ class AnnouncementService:
         success_count = 0
         fail_count = 0
 
+        logger.info(f"Начало отправки сообщения {len(chat_ids)} получателям")
+        if media_type:
+            logger.info(f"С медиа типа {media_type}, ID: {media_content}")
+
         for chat_id in chat_ids:
             try:
-                await bot.send_message(chat_id=chat_id, text=message)
+                if media_type == 'photo' and media_content:
+                    # Отправляем фото с текстом в caption
+                    await bot.send_photo(
+                        chat_id=chat_id,
+                        photo=media_content,
+                        caption=message
+                    )
+                    logger.debug(f"Отправлено фото пользователю {chat_id}")
+                elif media_type == 'video' and media_content:
+                    # Отправляем видео с текстом в caption
+                    await bot.send_video(
+                        chat_id=chat_id,
+                        video=media_content,
+                        caption=message
+                    )
+                    logger.debug(f"Отправлено видео пользователю {chat_id}")
+                else:
+                    # Отправляем только текст
+                    await bot.send_message(
+                        chat_id=chat_id,
+                        text=message
+                    )
+                    logger.debug(f"Отправлен текст пользователю {chat_id}")
+
                 success_count += 1
             except Exception as e:
-                logger.error(f"Failed to send message to chat_id {chat_id}: {e}")
+                logger.error(f"Помилка при надсиланні повідомлення до {chat_id}: {e}")
                 fail_count += 1
 
+        logger.info(f"Завершена отправка: {success_count} успешно, {fail_count} с ошибками")
         return success_count, fail_count
 
     # Методи для роботи з викладачами
@@ -60,12 +89,12 @@ class AnnouncementService:
 
     # Методи для роботи зі студентами
 
-    async def send_to_all_students(self, message: str, bot) -> Tuple[int, int]:
+    async def send_to_all_students(self, message: str, bot, media_type=None, media_content=None) -> Tuple[int, int]:
         """Надіслати оголошення всім студентам."""
         students = self.announcement_repository.get_all_students()
         chat_ids = [student['chat_id'] for student in students if student['chat_id']]
 
-        return await self.send_announcement_to_recipients(message, chat_ids, bot)
+        return await self.send_announcement_to_recipients(message, chat_ids, bot, media_type=media_type, media_content=media_content)
 
     async def send_to_group_students(self, group_id: int, message: str, bot) -> Tuple[int, int]:
         """Надіслати оголошення студентам конкретної групи."""
@@ -168,4 +197,3 @@ class AnnouncementService:
         elif recipient_type == 'specific_students' and ids_list:
             return len(self.announcement_repository.get_students_by_ids(ids_list))
         return 0
-
