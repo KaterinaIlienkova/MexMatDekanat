@@ -22,6 +22,7 @@ class AnnouncementService:
 
         Returns:
             Tuple[int, int]: (кількість успішних відправлень, кількість невдалих відправлень)
+            :param media_type:
         """
         success_count = 0
         fail_count = 0
@@ -124,12 +125,12 @@ class AnnouncementService:
 
         return await self.send_announcement_to_recipients(message, chat_ids, bot)
 
-    async def send_to_specific_students(self, student_ids: List[int], message: str, bot) -> Tuple[int, int]:
+    async def send_to_specific_students(self, student_ids: List[int], message: str, bot, media_type=None, media_content=None) -> Tuple[int, int]:
         """Надіслати оголошення конкретним студентам за їх ID."""
         students = self.announcement_repository.get_students_by_ids(student_ids)
         chat_ids = [student['chat_id'] for student in students if student['chat_id']]
 
-        return await self.send_announcement_to_recipients(message, chat_ids, bot)
+        return await self.send_announcement_to_recipients(message, chat_ids, bot,media_type=media_type, media_content=media_content)
 
     # Допоміжні методи для отримання списків для вибору
 
