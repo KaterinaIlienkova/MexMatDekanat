@@ -197,4 +197,3 @@ class AnnouncementService:
         elif recipient_type == 'specific_students' and ids_list:
             return len(self.announcement_repository.get_students_by_ids(ids_list))
         return 0
-
