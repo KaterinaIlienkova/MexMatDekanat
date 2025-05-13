@@ -2,6 +2,7 @@ from sqlalchemy import Column, Integer, String, ForeignKey, Enum, BigInteger, Te
 from sqlalchemy.orm import relationship, declarative_base
 from source.base import Base
 
+
 class User(Base):
     __tablename__ = 'users'
 
@@ -13,10 +14,10 @@ class User(Base):
     ChatID = Column(BigInteger, nullable=True)
     IsConfirmed = Column(Boolean, default=False)
 
-
     students = relationship("Student", back_populates="user", uselist=False)
     teachers = relationship("Teacher", back_populates="user", uselist=False)
     dean_office_staff = relationship("DeanOfficeStaff", back_populates="user", uselist=False)
+
 
 class Student(Base):
     __tablename__ = 'students'
@@ -43,6 +44,7 @@ class Teacher(Base):
     user = relationship("User", back_populates="teachers")
     department = relationship("Department", back_populates="teachers")
 
+
 class DeanOfficeStaff(Base):
     __tablename__ = 'deanofficestaff'
 
@@ -52,6 +54,7 @@ class DeanOfficeStaff(Base):
 
     user = relationship("User", back_populates="dean_office_staff")
 
+
 class Department(Base):
     __tablename__ = 'departments'
 
@@ -59,6 +62,7 @@ class Department(Base):
     Name = Column(String(100), nullable=False)
 
     teachers = relationship("Teacher", back_populates="department")
+
 
 class StudentGroup(Base):
     __tablename__ = 'studentgroups'
@@ -70,6 +74,7 @@ class StudentGroup(Base):
     specialty = relationship("Specialty", back_populates="groups")
     students = relationship("Student", back_populates="group")
 
+
 class Specialty(Base):
     __tablename__ = 'specialties'
 
@@ -77,6 +82,7 @@ class Specialty(Base):
     Name = Column(String(100), nullable=False)
 
     groups = relationship("StudentGroup", back_populates="specialty")
+
 
 class Course(Base):
     __tablename__ = 'courses'
@@ -102,7 +108,6 @@ class CourseEnrollment(Base):
     student = relationship("Student", back_populates="course_enrollments")
 
 
-
 class PersonalQuestion(Base):
     __tablename__ = 'personalquestions'
 
@@ -113,6 +118,7 @@ class PersonalQuestion(Base):
     Status = Column(Enum('pending', 'answered'), nullable=False, default='pending')
     AnsweredBy = Column(Integer, ForeignKey('users.UserID'), nullable=True)
     Timestamp = Column(TIMESTAMP, nullable=False)
+
 
 class FAQ(Base):
     __tablename__ = 'faqs'
@@ -129,6 +135,7 @@ class DocumentType(Base):
     TypeName = Column(String(100), nullable=False)
 
     requests = relationship("DocumentRequest", back_populates="document_type")
+
 
 class DocumentRequest(Base):
     __tablename__ = 'documentrequests'
