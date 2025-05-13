@@ -2,6 +2,9 @@ from telegram import Update, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import CallbackContext, CommandHandler, MessageHandler, filters
 
 from source.controllers.BaseController import BaseController
+import logging
+
+logger = logging.getLogger(__name__)
 
 class MenuController(BaseController):
     def __init__(self, application,document_controller,faq_controller,course_controller,auth_controller,announcement_controller, pqa_controller ):
