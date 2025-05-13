@@ -1,4 +1,3 @@
-import telegram
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     CallbackContext,
@@ -49,7 +48,8 @@ class AnnouncementController:
                     self.WAITING_FOR_ANNOUNCEMENT_TEXT: [
                         MessageHandler(filters.TEXT & ~filters.COMMAND, self.process_announcement_text),
                         MessageHandler(filters.PHOTO, self.handle_process_photo_and_video),
-                        MessageHandler(filters.VIDEO, self.handle_process_photo_and_video)
+                        MessageHandler(filters.VIDEO, self.handle_process_photo_and_video),
+                        MessageHandler(filters.Document.ALL, self.handle_process_photo_and_video)
                     ],
                     self.WAITING_FOR_ANNOUNCEMENT_CONFIRMATION: [
                         CallbackQueryHandler(self.send_announcement, pattern="^confirm_send$"),
@@ -475,6 +475,11 @@ class AnnouncementController:
             context.user_data['announcement_data']['media_type'] = 'video'
             logger.info(f"Сохранено видео. ID: {update.message.video.file_id}")
 
+        elif update.message.document:
+            context.user_data['announcement_photo']['document'] = update.message.document
+            context.user_data['announcement_data']['media_type'] = 'document'
+            logger.info(f"Сохранен документ. ID: {update.message.document.file_id}")
+
         else:
             logger.warning("Получено сообщение без фото или видео")
             context.user_data['announcement_data']['media_type'] = None
@@ -509,6 +514,12 @@ class AnnouncementController:
                 caption=confirmation_message,
                 reply_markup=reply_markup
             )
+        elif update.message.document:
+            await update.message.reply_document(
+                document=update.message.document.file_id,
+                caption=confirmation_message,
+                reply_markup=reply_markup
+            )
         else:
             await update.message.reply_text(
                 confirmation_message,
@@ -533,10 +544,12 @@ class AnnouncementController:
 
         if media_type == 'photo' and 'photo' in photo_data:
             media_content = photo_data['photo'][-1].file_id
-            logger.info(f"Отправка фото с ID: {media_content}")
+
         elif media_type == 'video' and 'video' in photo_data:
             media_content = photo_data['video'].file_id
-            logger.info(f"Отправка видео с ID: {media_content}")
+
+        elif media_type == 'document' and 'document' in photo_data:
+            media_content = photo_data['document'].file_id
 
         try:
             if recipient_type == "all_teachers":
@@ -591,6 +604,8 @@ class AnnouncementController:
         if query.message.photo:
             await query.message.edit_caption(caption=result_message)
         elif query.message.video:
+            await query.message.edit_caption(caption=result_message)
+        elif query.message.document:
             await query.message.edit_caption(caption=result_message)
         else:
             await query.message.edit_text(result_message)
