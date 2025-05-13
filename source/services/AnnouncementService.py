@@ -22,71 +22,68 @@ class AnnouncementService:
 
         Returns:
             Tuple[int, int]: (кількість успішних відправлень, кількість невдалих відправлень)
-            :param media_type:
         """
         success_count = 0
         fail_count = 0
 
-        logger.info(f"Начало отправки сообщения {len(chat_ids)} получателям")
         if media_type:
-            logger.info(f"С медиа типа {media_type}, ID: {media_content}")
+            logger.info(f"З медиа типа {media_type}, ID: {media_content}")
 
         for chat_id in chat_ids:
             try:
                 if media_type == 'photo' and media_content:
-                    # Отправляем фото с текстом в caption
                     await bot.send_photo(
                         chat_id=chat_id,
                         photo=media_content,
                         caption=message
                     )
-                    logger.debug(f"Отправлено фото пользователю {chat_id}")
                 elif media_type == 'video' and media_content:
-                    # Отправляем видео с текстом в caption
                     await bot.send_video(
                         chat_id=chat_id,
                         video=media_content,
                         caption=message
                     )
-                    logger.debug(f"Отправлено видео пользователю {chat_id}")
+                elif media_type == 'document' and media_content:
+                    await bot.send_document(
+                        chat_id=chat_id,
+                        document=media_content,
+                        caption=message
+                    )
                 else:
-                    # Отправляем только текст
                     await bot.send_message(
                         chat_id=chat_id,
                         text=message
                     )
-                    logger.debug(f"Отправлен текст пользователю {chat_id}")
 
                 success_count += 1
             except Exception as e:
                 logger.error(f"Помилка при надсиланні повідомлення до {chat_id}: {e}")
                 fail_count += 1
 
-        logger.info(f"Завершена отправка: {success_count} успешно, {fail_count} с ошибками")
         return success_count, fail_count
 
     # Методи для роботи з викладачами
 
-    async def send_to_all_teachers(self, message: str, bot) -> Tuple[int, int]:
+    async def send_to_all_teachers(self, message: str, bot, media_type=None, media_content=None) -> Tuple[int, int]:
         """Надіслати оголошення всім викладачам."""
         teachers = self.announcement_repository.get_all_teachers()
         chat_ids = [teacher['chat_id'] for teacher in teachers if teacher['chat_id']]
 
-        return await self.send_announcement_to_recipients(message, chat_ids, bot)
+        return await self.send_announcement_to_recipients(message, chat_ids, bot, media_type=media_type, media_content=media_content)
 
-    async def send_to_department_teachers(self, department_id: int, message: str, bot) -> Tuple[int, int]:
+    async def send_to_department_teachers(self, department_id: int, message: str, bot, media_type=None, media_content=None) -> Tuple[int, int]:
         """Надіслати оголошення викладачам конкретної кафедри."""
         teachers = self.announcement_repository.get_teachers_by_department(department_id)
         chat_ids = [teacher['chat_id'] for teacher in teachers if teacher['chat_id']]
 
-        return await self.send_announcement_to_recipients(message, chat_ids, bot)
+        return await self.send_announcement_to_recipients(message, chat_ids, bot, media_type=media_type, media_content=media_content)
 
-    async def send_to_specific_teachers(self, teacher_ids: List[int], message: str, bot) -> Tuple[int, int]:
+    async def send_to_specific_teachers(self, teacher_ids: List[int], message: str, bot, media_type=None, media_content=None) -> Tuple[int, int]:
         """Надіслати оголошення конкретним викладачам за їх ID."""
         teachers = self.announcement_repository.get_teachers_by_ids(teacher_ids)
         chat_ids = [teacher['chat_id'] for teacher in teachers if teacher['chat_id']]
 
-        return await self.send_announcement_to_recipients(message, chat_ids, bot)
+        return await self.send_announcement_to_recipients(message, chat_ids, bot, media_type=media_type, media_content=media_content)
 
     # Методи для роботи зі студентами
 
@@ -97,40 +94,40 @@ class AnnouncementService:
 
         return await self.send_announcement_to_recipients(message, chat_ids, bot, media_type=media_type, media_content=media_content)
 
-    async def send_to_group_students(self, group_id: int, message: str, bot) -> Tuple[int, int]:
+    async def send_to_group_students(self, group_id: int, message: str, bot, media_type=None, media_content=None) -> Tuple[int, int]:
         """Надіслати оголошення студентам конкретної групи."""
         students = self.announcement_repository.get_students_by_group(group_id)
         chat_ids = [student['chat_id'] for student in students if student['chat_id']]
 
-        return await self.send_announcement_to_recipients(message, chat_ids, bot)
+        return await self.send_announcement_to_recipients(message, chat_ids, bot, media_type=media_type, media_content=media_content)
 
-    async def send_to_specialty_students(self, specialty_id: int, message: str, bot) -> Tuple[int, int]:
+    async def send_to_specialty_students(self, specialty_id: int, message: str, bot, media_type=None, media_content=None) -> Tuple[int, int]:
         """Надіслати оголошення студентам конкретної спеціальності."""
         students = self.announcement_repository.get_students_by_specialty(specialty_id)
         chat_ids = [student['chat_id'] for student in students if student['chat_id']]
 
-        return await self.send_announcement_to_recipients(message, chat_ids, bot)
+        return await self.send_announcement_to_recipients(message, chat_ids, bot, media_type=media_type, media_content=media_content)
 
-    async def send_to_course_year_students(self, course_year: int, message: str, bot) -> Tuple[int, int]:
+    async def send_to_course_year_students(self, course_year: int, message: str, bot, media_type=None, media_content=None) -> Tuple[int, int]:
         """Надіслати оголошення студентам конкретного курсу навчання."""
         students = self.announcement_repository.get_students_by_course_year(course_year)
         chat_ids = [student['chat_id'] for student in students if student['chat_id']]
 
-        return await self.send_announcement_to_recipients(message, chat_ids, bot)
+        return await self.send_announcement_to_recipients(message, chat_ids, bot, media_type=media_type, media_content=media_content)
 
-    async def send_to_course_enrollment_students(self, course_id: int, message: str, bot) -> Tuple[int, int]:
+    async def send_to_course_enrollment_students(self, course_id: int, message: str, bot, media_type=None, media_content=None) -> Tuple[int, int]:
         """Надіслати оголошення студентам, які записані на конкретний курс."""
         students = self.announcement_repository.get_students_by_course_enrollment(course_id)
         chat_ids = [student['chat_id'] for student in students if student['chat_id']]
 
-        return await self.send_announcement_to_recipients(message, chat_ids, bot)
+        return await self.send_announcement_to_recipients(message, chat_ids, bot, media_type=media_type, media_content=media_content)
 
     async def send_to_specific_students(self, student_ids: List[int], message: str, bot, media_type=None, media_content=None) -> Tuple[int, int]:
         """Надіслати оголошення конкретним студентам за їх ID."""
         students = self.announcement_repository.get_students_by_ids(student_ids)
         chat_ids = [student['chat_id'] for student in students if student['chat_id']]
 
-        return await self.send_announcement_to_recipients(message, chat_ids, bot,media_type=media_type, media_content=media_content)
+        return await self.send_announcement_to_recipients(message, chat_ids, bot, media_type=media_type, media_content=media_content)
 
     # Допоміжні методи для отримання списків для вибору
 
