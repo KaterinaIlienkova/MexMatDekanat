@@ -15,7 +15,8 @@ logger = logging.getLogger(__name__)
 
 
 class AnnouncementController:
-    def __init__(self, application, announcement_service):
+    def __init__(self, application, announcement_service,auth_controller):
+        self.auth_controller = auth_controller
         self.application = application
         self.announcement_service = announcement_service
 
@@ -36,10 +37,12 @@ class AnnouncementController:
                 ],
                 states={
                     self.WAITING_FOR_RECIPIENT_TYPE: [
-                        CallbackQueryHandler(self.select_recipient_type, pattern="^recipient_")
+                        CallbackQueryHandler(self.select_recipient_type, pattern="^recipient_"),
+                        CallbackQueryHandler(self.cancel_announcement, pattern="^cancel_announcement$")
                     ],
                     self.WAITING_FOR_TARGET_SELECTION: [
-                        CallbackQueryHandler(self.select_target, pattern="^target_")
+                        CallbackQueryHandler(self.select_target, pattern="^target_"),
+                        CallbackQueryHandler(self.cancel_announcement, pattern="^cancel_announcement$")
                     ],
                     self.WAITING_FOR_SPECIFIC_RECIPIENTS: [
                         CallbackQueryHandler(self.select_specific_recipient, pattern="^select_"),
@@ -54,7 +57,8 @@ class AnnouncementController:
                     self.WAITING_FOR_ANNOUNCEMENT_CONFIRMATION: [
                         CallbackQueryHandler(self.send_announcement, pattern="^confirm_send$"),
                         CallbackQueryHandler(self.cancel_announcement, pattern="^cancel_send$")
-                    ]
+                    ],
+
                 },
                 fallbacks=[CommandHandler("cancel", self.cancel_announcement_creation)]
 
@@ -63,22 +67,43 @@ class AnnouncementController:
 
     async def start_announcement(self, update: Update, context: CallbackContext) -> int:
         """Розпочинає процес створення оголошення."""
-        # Перевірка прав доступу (тільки для працівників деканату)
-        user_id = update.effective_user.id
-        # Реалізуйте перевірку прав тут
+        # Перевірка прав доступу
+        role = await self.auth_controller.check_registration(update, context)
+        if role is None:
+            await update.effective_message.reply_text(
+                "Ви не зареєстровані в системі. Зареєструйтесь спочатку."
+            )
+            return ConversationHandler.END
 
-        keyboard = [
-            [InlineKeyboardButton("Всім викладачам", callback_data="recipient_all_teachers")],
-            [InlineKeyboardButton("Викладачам кафедри", callback_data="recipient_department_teachers")],
-            [InlineKeyboardButton("Окремим викладачам", callback_data="recipient_specific_teachers")],
-            [InlineKeyboardButton("Всім студентам", callback_data="recipient_all_students")],
-            [InlineKeyboardButton("Студентам групи", callback_data="recipient_group_students")],
-            [InlineKeyboardButton("Студентам спеціальності", callback_data="recipient_specialty_students")],
-            [InlineKeyboardButton("Студентам курсу", callback_data="recipient_course_year_students")],
-            [InlineKeyboardButton("Студентам, що вивчають предмет", callback_data="recipient_course_enrollment_students")],
-            [InlineKeyboardButton("Окремим студентам", callback_data="recipient_specific_students")]
-        ]
+        # Зберігаємо роль у контексті
+        context.user_data['role'] = role
 
+        # Визначаємо доступні опції в залежності від ролі
+        if role == "teacher":
+            # Меню для викладача (обмежене)
+            keyboard = [
+                [InlineKeyboardButton("Студентам, що вивчають мій предмет", callback_data="recipient_teacher_course_students")],
+                [InlineKeyboardButton("Окремим студентам з моїх курсів", callback_data="recipient_teacher_specific_students")]
+            ]
+        elif role == "dean_office":
+            # Повне меню для працівника деканату
+            keyboard = [
+                [InlineKeyboardButton("Всім викладачам", callback_data="recipient_all_teachers")],
+                [InlineKeyboardButton("Викладачам кафедри", callback_data="recipient_department_teachers")],
+                [InlineKeyboardButton("Окремим викладачам", callback_data="recipient_specific_teachers")],
+                [InlineKeyboardButton("Всім студентам", callback_data="recipient_all_students")],
+                [InlineKeyboardButton("Студентам групи", callback_data="recipient_group_students")],
+                [InlineKeyboardButton("Студентам спеціальності", callback_data="recipient_specialty_students")],
+                [InlineKeyboardButton("Студентам курсу", callback_data="recipient_course_year_students")],
+                [InlineKeyboardButton("Студентам, що вивчають предмет", callback_data="recipient_course_enrollment_students")],
+                [InlineKeyboardButton("Окремим студентам", callback_data="recipient_specific_students")]
+            ]
+        else:
+            # Для студентів або інших ролей повідомляємо про відсутність прав
+            await update.effective_message.reply_text(
+                "У вас недостатньо прав для створення оголошень."
+            )
+            return ConversationHandler.END
         reply_markup = InlineKeyboardMarkup(keyboard)
 
         message = await update.effective_message.reply_text(
@@ -97,14 +122,65 @@ class AnnouncementController:
         """Обробляє вибір типу отримувачів."""
         query = update.callback_query
         await query.answer()
+        telegram_tag = update.effective_user.username
 
         recipient_type = query.data.split('_', 1)[1]
 
         # Зберігаємо обраний тип отримувачів
         context.user_data['announcement_data']['recipient_type'] = recipient_type
 
-        # Залежно від типу отримувачів переходимо до наступного кроку
-        if recipient_type == "all_teachers" or recipient_type == "all_students":
+
+
+        # Обробка особливих типів для викладачів
+        if recipient_type == "teacher_course_students":
+            # Отримуємо список курсів викладача
+            teacher_courses = self.announcement_service.get_teacher_course_enrollments(telegram_tag)
+
+            if not teacher_courses:
+                await query.edit_message_text("У вас немає активних курсів. Неможливо надіслати оголошення.")
+                return ConversationHandler.END
+
+            keyboard = [
+                [InlineKeyboardButton(course['name'], callback_data=f"target_{course['course_id']}")]
+                for course in teacher_courses
+            ]
+            keyboard.append([InlineKeyboardButton("Скасувати", callback_data="cancel_announcement")])
+
+            reply_markup = InlineKeyboardMarkup(keyboard)
+
+            await query.edit_message_text(
+                "Оберіть курс, студентам якого бажаєте надіслати оголошення:",
+                reply_markup=reply_markup
+            )
+            # Відмічаємо, що це спеціальний тип для викладача
+            context.user_data['announcement_data']['recipient_type'] = "course_enrollment_students"
+            return self.WAITING_FOR_TARGET_SELECTION
+
+        elif recipient_type == "teacher_specific_students":
+            # Отримуємо список студентів з курсів викладача
+            students = self.announcement_service.get_teacher_students(telegram_tag)
+
+            if not students:
+                await query.edit_message_text("У вас немає студентів на активних курсах. Неможливо надіслати оголошення.")
+                return ConversationHandler.END
+
+            context.user_data['announcement_data']['available_recipients'] = students
+            context.user_data['announcement_data']['selected_recipients'] = []
+
+            # Відображаємо перших 10 студентів
+            keyboard = self._get_specific_recipients_keyboard(students[:10], "student", 0)
+
+            reply_markup = InlineKeyboardMarkup(keyboard)
+
+            await query.edit_message_text(
+                "Оберіть студентів для надсилання оголошення:",
+                reply_markup=reply_markup
+            )
+            # Відмічаємо, що це спеціальний тип для викладача, але по суті це specific_students
+            context.user_data['announcement_data']['recipient_type'] = "myspecific_students"
+            return self.WAITING_FOR_SPECIFIC_RECIPIENTS
+
+        elif recipient_type == "all_teachers" or recipient_type == "all_students":
             # Для випадків, коли не потрібно додаткового вибору
             recipients_count = self.announcement_service.get_recipients_count(recipient_type)
 
@@ -180,7 +256,7 @@ class AnnouncementController:
 
         reply_markup = InlineKeyboardMarkup(keyboard)
 
-        if recipient_type in ["specific_teachers", "specific_students"]:
+        if recipient_type in ["specific_teachers", "specific_students","myspecific_students"]:
             await query.edit_message_text(
                 f"Оберіть {self._get_recipient_type_name(recipient_type)}:",
                 reply_markup=reply_markup
@@ -551,11 +627,19 @@ class AnnouncementController:
         elif media_type == 'document' and 'document' in photo_data:
             media_content = photo_data['document'].file_id
 
+
+
         try:
             if recipient_type == "all_teachers":
                 success_count, fail_count = await self.announcement_service.send_to_all_teachers(
-                    message_text, bot, media_type=media_type, media_content=media_content)
-
+                message_text, bot, media_type=media_type, media_content=media_content)
+            elif recipient_type == "course_enrollment_students":
+                course_id = data['target_id']
+                success_count, fail_count = await self.announcement_service.send_to_course_enrollment_students(
+                course_id, message_text, bot, media_type=media_type, media_content=media_content)
+            elif  recipient_type == "myspecific_students":
+                success_count, fail_count = await self.announcement_service.send_to_specific_students(
+                data['student_ids'],message_text, bot, media_type=media_type, media_content=media_content)
             elif recipient_type == "department_teachers":
                 success_count, fail_count = await self.announcement_service.send_to_department_teachers(
                     data['target_id'], message_text, bot, media_type=media_type, media_content=media_content)
@@ -643,7 +727,8 @@ class AnnouncementController:
             "group_students": "Студенти групи",
             "specialty_students": "Студенти спеціальності",
             "course_year_students": "Студенти курсу",
-            "course_enrollment_students": "Студенти, що вивчають предмет",
-            "specific_students": "Окремі студенти"
+            "specific_students": "Окремі студенти",
+            "course_enrollment_students": "Студенти, що вивчають мій предмет",
+            "myspecific_students": "Окремі студенти з моїх курсів"
         }
         return types.get(recipient_type, recipient_type)

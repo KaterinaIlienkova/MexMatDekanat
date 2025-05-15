@@ -2,7 +2,7 @@ from typing import List, Dict, Any, Optional, Union, Tuple
 import logging
 from datetime import datetime
 
-from source.repositories import AnnouncementRepository
+from source.repositories import AnnouncementRepository, CourseRepository
 
 logger = logging.getLogger(__name__)
 
@@ -10,6 +10,8 @@ logger = logging.getLogger(__name__)
 class AnnouncementService:
     def __init__(self, announcement_repository: AnnouncementRepository):
         self.announcement_repository = announcement_repository
+
+
 
     async def send_announcement_to_recipients(self, message: str, chat_ids: List[str], bot, media_type=None, media_content=None) -> Tuple[int, int]:
         """
@@ -129,6 +131,58 @@ class AnnouncementService:
 
         return await self.send_announcement_to_recipients(message, chat_ids, bot, media_type=media_type, media_content=media_content)
 
+    def get_teacher_students(self, teacher_telegram_tag: str) -> List[Dict[str, Any]]:
+        """
+        Отримати список всіх студентів, які записані хоча б на один курс викладача.
+
+        Args:
+            teacher_telegram_tag: Telegram тег викладача
+
+        Returns:
+            List[Dict[str, Any]]: Список студентів
+        """
+    # Отримуємо всі курси викладача
+        teacher_courses = self.announcement_repository.get_teacher_courses(teacher_telegram_tag, active_only=True)
+
+        # Збираємо унікальних студентів з усіх курсів
+        all_students = {}
+        for course in teacher_courses:
+            course_id = course['course_id']
+            students = self.announcement_repository.get_course_students(course_id)
+
+            for student in students:
+                # Використовуємо telegram_tag як ключ для унікальності
+                if student['telegram_tag'] and student['telegram_tag'] not in all_students:
+                    all_students[student['telegram_tag']] = {
+                        'student_id': student.get('student_id'),  # Припускаємо, що це поле є
+                        'name': student['student_name'],
+                        'group': student.get('group_name', 'Невідома група')  # Можливо, цього поля немає в get_course_students
+                    }
+
+        # Повертаємо список словників
+        return list(all_students.values())
+
+    def get_teacher_course_enrollments(self, teacher_telegram_tag: str) -> List[Dict[str, Any]]:
+        """
+        Отримати список курсів викладача для вибору в розсилці.
+
+        Args:
+            teacher_telegram_tag: Telegram тег викладача
+
+        Returns:
+            List[Dict[str, Any]]: Список курсів
+        """
+        teacher_courses = self.announcement_repository.get_teacher_courses(teacher_telegram_tag, active_only=True)
+        courses_list = []
+
+        for course in teacher_courses:
+            courses_list.append({
+                'course_id': course['course_id'],
+                'name': course['course_name'],
+                'teacher': "Ви"  # оскільки це власні курси викладача
+            })
+
+        return courses_list
     # Допоміжні методи для отримання списків для вибору
 
     def get_departments_list(self) -> List[Dict[str, Any]]:

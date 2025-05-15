@@ -92,7 +92,7 @@ class MenuController(BaseController):
             ],
             "teacher": [
                 [KeyboardButton("Списки студентів")],
-                [KeyboardButton("Мої курси")]
+                [KeyboardButton("Мої курси"), KeyboardButton("Оголошення")]
             ],
         }
         return keyboards.get(role, [])
