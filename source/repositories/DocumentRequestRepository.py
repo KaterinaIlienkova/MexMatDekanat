@@ -1,36 +1,33 @@
 from source.config import logger
 from source.models import DocumentRequest, DocumentType
-class DocumentRequestRepository:
-    def __init__(self, session_factory):
-        self.session_factory = session_factory
+from source.repositories.BaseRepository import BaseRepository
+
+
+class DocumentRequestRepository(BaseRepository):
 
     def get_pending_requests(self):
-        with self.session_factory() as db:
-            return db.query(DocumentRequest).filter(DocumentRequest.Status == 'pending').all()
+        return self.session.query(DocumentRequest).filter(DocumentRequest.Status == 'pending').all()
 
     def get_request_by_id(self, request_id):
-        with self.session_factory() as db:
-            return db.query(DocumentRequest).filter(DocumentRequest.RequestID == request_id).first()
+        return self.session.query(DocumentRequest).filter(DocumentRequest.RequestID == request_id).first()
 
     def create_request(self, student_id, type_id):
-        with self.session_factory() as db:
             new_request = DocumentRequest(
                 StudentID=student_id,
                 TypeID=type_id,
                 Status='pending'
             )
-            db.add(new_request)
-            db.commit()
-            db.refresh(new_request)
+            self.session.add(new_request)
+            self.session.commit()
+            self.session.refresh(new_request)
             return new_request
 
     def update_request_status(self, request_id, status):
-        with self.session_factory() as db:
-            request = db.query(DocumentRequest).filter_by(RequestID=request_id).first()
+            request = self.session.query(DocumentRequest).filter_by(RequestID=request_id).first()
             if not request:
                 return None, None
             request.Status = status
-            db.commit()
+            self.session.commit()
             return request.StudentID, request.RequestID
 
     # def update_request_status_with_scan(self, request_id, status):

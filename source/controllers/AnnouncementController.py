@@ -11,21 +11,26 @@ from typing import List, Dict, Any
 from collections import defaultdict
 import logging
 
+from source.controllers.BaseController import BaseController
+
 logger = logging.getLogger(__name__)
 
 
-class AnnouncementController:
+class AnnouncementController(BaseController):
+    # Стани розмови
+    WAITING_FOR_RECIPIENT_TYPE = 1
+    WAITING_FOR_TARGET_SELECTION = 2
+    WAITING_FOR_SPECIFIC_RECIPIENTS = 3
+    WAITING_FOR_ANNOUNCEMENT_TEXT = 4
+    WAITING_FOR_ANNOUNCEMENT_CONFIRMATION = 5
+
     def __init__(self, application, announcement_service,auth_controller):
-        self.auth_controller = auth_controller
+        super().__init__(application)
         self.application = application
         self.announcement_service = announcement_service
+        self.auth_controller =auth_controller
 
-        # Стани розмови
-        self.WAITING_FOR_RECIPIENT_TYPE = 1
-        self.WAITING_FOR_TARGET_SELECTION = 2
-        self.WAITING_FOR_SPECIFIC_RECIPIENTS = 3
-        self.WAITING_FOR_ANNOUNCEMENT_TEXT = 4
-        self.WAITING_FOR_ANNOUNCEMENT_CONFIRMATION = 5
+
 
     def register_handlers(self):
         """Реєстрація обробників для функціоналу оголошень."""
@@ -270,18 +275,33 @@ class AnnouncementController:
             return self.WAITING_FOR_TARGET_SELECTION
 
     def _get_specific_recipients_keyboard(self, recipients: List[Dict[str, Any]], recipient_type: str, page: int) -> List[List[InlineKeyboardButton]]:
-        """Створює клавіатуру для вибору конкретних отримувачів."""
+        #Створює клавіатуру для вибору конкретних отримувачів."""
         keyboard = []
 
         # Створюємо кнопки для кожного отримувача
         for recipient in recipients:
             if recipient_type == "teacher":
                 name = f"{recipient['name']} ({recipient['department'] or 'без кафедри'})"
+                # Перевіряємо, чи є 'teacher_id' в словнику
+                if 'teacher_id' not in recipient:
+                    logger.error(f"Відсутній teacher_id у даних викладача: {recipient}")
+                    continue
                 recipient_id = recipient['teacher_id']
+                if recipient_id is None:
+                    logger.error(f"teacher_id є None для викладача: {recipient}")
+                    continue
             else:  # студент
-                name = f"{recipient['name']} ({recipient['group']})"
+                name = f"{recipient['name']}"
+                # Перевіряємо, чи є 'student_id' в словнику
+                if 'student_id' not in recipient:
+                    logger.error(f"Відсутній student_id у даних студента: {recipient}")
+                    continue
                 recipient_id = recipient['student_id']
+                if recipient_id is None:
+                    logger.error(f"student_id є None для студента: {recipient}")
+                    continue
 
+            # Створюємо кнопку тільки якщо ID є валідним
             keyboard.append([InlineKeyboardButton(name, callback_data=f"select_{recipient_type}_{recipient_id}")])
 
         # Додаємо навігаційні кнопки та кнопку завершення вибору
@@ -389,66 +409,95 @@ class AnnouncementController:
             )
             return self.WAITING_FOR_SPECIFIC_RECIPIENTS
 
-        # Обробка вибору конкретного отримувача
-        recipient_type = parts[1]  # "teacher" або "student"
-        recipient_id = int(parts[2])
+        # Перевіряємо, чи це запит на вибір конкретного отримувача
+        if parts[0] == "select" and len(parts) >= 3:
+            # Обробка вибору конкретного отримувача
+            recipient_type = parts[1]  # "teacher" або "student"
 
-        # Додаємо до вибраних отримувачів
-        if 'selected_recipients' not in context.user_data['announcement_data']:
-            context.user_data['announcement_data']['selected_recipients'] = []
+            # Додаємо перевірку наявності коректного ID
+            if len(parts) < 3 or parts[2] == "None":
+                # Неправильний формат даних - логуємо помилку і повертаємо поточний стан
+                logger.error(f"Некоректний формат даних callback: {query.data}")
+                await query.edit_message_text(
+                    "Сталася помилка при виборі отримувача. Спробуйте ще раз або скасуйте операцію.",
+                    reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Скасувати", callback_data="cancel_announcement")]])
+                )
+                return self.WAITING_FOR_SPECIFIC_RECIPIENTS
 
-        selected_recipients = context.user_data['announcement_data']['selected_recipients']
+            try:
+                recipient_id = int(parts[2])
+            except ValueError:
+                # Неможливо перетворити на число - логуємо помилку і повертаємо поточний стан
+                logger.error(f"Неможливо перетворити ID на число: {parts[2]}")
+                await query.edit_message_text(
+                    "Сталася помилка при виборі отримувача. Спробуйте ще раз або скасуйте операцію.",
+                    reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Скасувати", callback_data="cancel_announcement")]])
+                )
+                return self.WAITING_FOR_SPECIFIC_RECIPIENTS
 
-        # Перевіряємо, чи вже вибрано цього отримувача
-        if recipient_id not in [r['id'] for r in selected_recipients]:
-            # Знаходимо інформацію про отримувача
+            # Додаємо до вибраних отримувачів
+            if 'selected_recipients' not in context.user_data['announcement_data']:
+                context.user_data['announcement_data']['selected_recipients'] = []
+
+            selected_recipients = context.user_data['announcement_data']['selected_recipients']
+
+            # Перевіряємо, чи вже вибрано цього отримувача
+            if recipient_id not in [r['id'] for r in selected_recipients]:
+                # Знаходимо інформацію про отримувача
+                available_recipients = context.user_data['announcement_data']['available_recipients']
+
+                for recipient in available_recipients:
+                    if recipient_type == "teacher" and recipient['teacher_id'] == recipient_id:
+                        selected_recipients.append({
+                            'id': recipient_id,
+                            'name': recipient['name'],
+                            'type': 'teacher'
+                        })
+                        break
+                    elif recipient_type == "student" and recipient['student_id'] == recipient_id:
+                        selected_recipients.append({
+                            'id': recipient_id,
+                            'name': recipient['name'],
+                            'type': 'student'
+                        })
+                        break
+
+            # Оновлюємо повідомлення з вибраними отримувачами
+            selected_text = "Вибрані отримувачі:\n"
+            for idx, recipient in enumerate(selected_recipients, 1):
+                selected_text += f"{idx}. {recipient['name']}\n"
+
+            if not selected_recipients:
+                selected_text = "Отримувачі не вибрані"
+
+            # Відображаємо поточну сторінку отримувачів
+            current_page = 0  # За замовчуванням показуємо першу сторінку
+            if parts[0] == "page":
+                current_page = int(parts[2])
+
             available_recipients = context.user_data['announcement_data']['available_recipients']
+            start_idx = current_page * 10
+            end_idx = start_idx + 10
 
-            for recipient in available_recipients:
-                if recipient_type == "teacher" and recipient['teacher_id'] == recipient_id:
-                    selected_recipients.append({
-                        'id': recipient_id,
-                        'name': recipient['name'],
-                        'type': 'teacher'
-                    })
-                    break
-                elif recipient_type == "student" and recipient['student_id'] == recipient_id:
-                    selected_recipients.append({
-                        'id': recipient_id,
-                        'name': recipient['name'],
-                        'type': 'student'
-                    })
-                    break
+            keyboard = self._get_specific_recipients_keyboard(
+                available_recipients[start_idx:end_idx],
+                recipient_type,
+                current_page
+            )
 
-        # Оновлюємо повідомлення з вибраними отримувачами
-        selected_text = "Вибрані отримувачі:\n"
-        for idx, recipient in enumerate(selected_recipients, 1):
-            selected_text += f"{idx}. {recipient['name']}\n"
+            reply_markup = InlineKeyboardMarkup(keyboard)
 
-        if not selected_recipients:
-            selected_text = "Отримувачі не вибрані"
-
-        # Відображаємо поточну сторінку отримувачів
-        current_page = 0  # За замовчуванням показуємо першу сторінку
-        if parts[0] == "page":
-            current_page = int(parts[2])
-
-        available_recipients = context.user_data['announcement_data']['available_recipients']
-        start_idx = current_page * 10
-        end_idx = start_idx + 10
-
-        keyboard = self._get_specific_recipients_keyboard(
-            available_recipients[start_idx:end_idx],
-            recipient_type,
-            current_page
-        )
-
-        reply_markup = InlineKeyboardMarkup(keyboard)
-
-        await query.edit_message_text(
-            f"{selected_text}\n\nОберіть отримувачів:",
-            reply_markup=reply_markup
-        )
+            await query.edit_message_text(
+                f"{selected_text}\n\nОберіть отримувачів:",
+                reply_markup=reply_markup
+            )
+        else:
+            # Невідомий тип запиту - логуємо помилку
+            logger.error(f"Невідомий тип запиту в select_specific_recipient: {query.data}")
+            await query.edit_message_text(
+                "Сталася помилка при обробці запиту. Спробуйте ще раз або скасуйте операцію.",
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Скасувати", callback_data="cancel_announcement")]])
+            )
 
         return self.WAITING_FOR_SPECIFIC_RECIPIENTS
 
@@ -477,11 +526,17 @@ class AnnouncementController:
             recipients_count = self.announcement_service.get_recipients_count(
                 recipient_type, ids_list=teacher_ids
             )
-        else:  # specific_students
+        elif recipient_type in ["specific_students", "myspecific_students"]:  # Додаємо myspecific_students у перевірку
             context.user_data['announcement_data']['student_ids'] = student_ids
             recipients_count = self.announcement_service.get_recipients_count(
-                recipient_type, ids_list=student_ids
+                "specific_students", ids_list=student_ids  # Використовуємо specific_students як тип для сервісу
             )
+        else:
+            # Це захист на випадок невизначеного типу отримувачів
+            await query.edit_message_text(
+                "Сталася помилка при виборі отримувачів. Спробуйте ще раз."
+            )
+            return self.WAITING_FOR_SPECIFIC_RECIPIENTS
 
         context.user_data['announcement_data']['recipients_count'] = recipients_count
 
@@ -604,6 +659,7 @@ class AnnouncementController:
 
         return self.WAITING_FOR_ANNOUNCEMENT_CONFIRMATION
 
+
     async def send_announcement(self, update: Update, context: CallbackContext) -> int:
         """Відправляє оголошення вибраним отримувачам."""
         query = update.callback_query
@@ -620,57 +676,41 @@ class AnnouncementController:
 
         if media_type == 'photo' and 'photo' in photo_data:
             media_content = photo_data['photo'][-1].file_id
-
         elif media_type == 'video' and 'video' in photo_data:
             media_content = photo_data['video'].file_id
-
         elif media_type == 'document' and 'document' in photo_data:
             media_content = photo_data['document'].file_id
-
-
 
         try:
             if recipient_type == "all_teachers":
                 success_count, fail_count = await self.announcement_service.send_to_all_teachers(
-                message_text, bot, media_type=media_type, media_content=media_content)
-            elif recipient_type == "course_enrollment_students":
-                course_id = data['target_id']
-                success_count, fail_count = await self.announcement_service.send_to_course_enrollment_students(
-                course_id, message_text, bot, media_type=media_type, media_content=media_content)
-            elif  recipient_type == "myspecific_students":
-                success_count, fail_count = await self.announcement_service.send_to_specific_students(
-                data['student_ids'],message_text, bot, media_type=media_type, media_content=media_content)
+                    message_text, bot, media_type=media_type, media_content=media_content)
             elif recipient_type == "department_teachers":
                 success_count, fail_count = await self.announcement_service.send_to_department_teachers(
                     data['target_id'], message_text, bot, media_type=media_type, media_content=media_content)
-
             elif recipient_type == "specific_teachers":
                 success_count, fail_count = await self.announcement_service.send_to_specific_teachers(
                     data['teacher_ids'], message_text, bot, media_type=media_type, media_content=media_content)
-
             elif recipient_type == "all_students":
                 success_count, fail_count = await self.announcement_service.send_to_all_students(
                     message_text, bot, media_type=media_type, media_content=media_content)
-
             elif recipient_type == "group_students":
                 success_count, fail_count = await self.announcement_service.send_to_group_students(
                     data['target_id'], message_text, bot, media_type=media_type, media_content=media_content)
-
             elif recipient_type == "specialty_students":
                 success_count, fail_count = await self.announcement_service.send_to_specialty_students(
                     data['target_id'], message_text, bot, media_type=media_type, media_content=media_content)
-
             elif recipient_type == "course_year_students":
                 success_count, fail_count = await self.announcement_service.send_to_course_year_students(
                     data['target_id'], message_text, bot, media_type=media_type, media_content=media_content)
-
             elif recipient_type == "course_enrollment_students":
                 success_count, fail_count = await self.announcement_service.send_to_course_enrollment_students(
                     data['target_id'], message_text, bot, media_type=media_type, media_content=media_content)
-
-            elif recipient_type == "specific_students":
+            elif recipient_type in ["specific_students", "myspecific_students"]:  # Об'єднуємо обидва випадки
                 success_count, fail_count = await self.announcement_service.send_to_specific_students(
                     data['student_ids'], message_text, bot, media_type=media_type, media_content=media_content)
+            else:
+                raise ValueError(f"Непідтримуваний тип отримувача: {recipient_type}")
 
             result_message = (
                 f"✅ Оголошення надіслано успішно!\n"

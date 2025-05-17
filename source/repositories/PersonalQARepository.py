@@ -2,35 +2,34 @@ from datetime import datetime
 from sqlalchemy import desc, func
 from typing import List, Optional, Tuple
 from source.models import PersonalQuestion, User, StudentGroup, Student
+from source.repositories.BaseRepository import BaseRepository
 
 
-class PersonalQARepository:
-    def __init__(self, get_session):
-        self.get_session = get_session
+class PersonalQARepository(BaseRepository):
+
 
     # Методи для студентів
     def create_question(self, user_id: int, question_text: str) -> int:
-        """
-        Створює нове персональне запитання від студента.
+            """
+            Створює нове персональне запитання від студента.
 
-        Args:
-            user_id: ID користувача, який створює запитання
-            question_text: Текст запитання
+            Args:
+                user_id: ID користувача, який створює запитання
+                question_text: Текст запитання
 
-        Returns:
-            ID створеного запитання
-        """
+            Returns:
+                ID створеного запитання
+            """
 
 
-        with self.get_session() as session:
             new_question = PersonalQuestion(
                 UserID=user_id,
                 Question=question_text,
                 Status='pending',
                 Timestamp=datetime.now()
             )
-            session.add(new_question)
-            session.commit()
+            self.session.add(new_question)
+            self.session.commit()
             return new_question.QuestionID
 
     # Методи для працівників деканату
@@ -41,35 +40,33 @@ class PersonalQARepository:
         Returns:
             Список об'єктів PersonalQuestion зі статусом 'pending'
         """
-        with self.get_session() as session:
-            pending_questions = session.query(PersonalQuestion).filter_by(Status='pending').all()
-            return pending_questions
+        pending_questions = self.session.query(PersonalQuestion).filter_by(Status='pending').all()
+        return pending_questions
 
     def get_question_details(self, question_id: int):
-        """
-        Отримує детальну інформацію про запитання, включаючи дані про студента.
+            """
+            Отримує детальну інформацію про запитання, включаючи дані про студента.
 
-        Args:
-            question_id: ID запитання
+            Args:
+                question_id: ID запитання
 
-        Returns:
-            Словник з інформацією про запитання та студента
-        """
-        with self.get_session() as session:
-            question = session.query(PersonalQuestion).filter_by(QuestionID=question_id).first()
+            Returns:
+                Словник з інформацією про запитання та студента
+            """
+            question = self.session.query(PersonalQuestion).filter_by(QuestionID=question_id).first()
 
             if not question:
                 return None
 
             # Отримуємо інформацію про користувача
-            user = session.query(User).filter_by(UserID=question.UserID).first()
+            user = self.session.query(User).filter_by(UserID=question.UserID).first()
 
             # Якщо це студент, отримуємо додаткову інформацію
             student_info = None
             if user and user.Role == 'student':
-                student = session.query(Student).filter_by(UserID=user.UserID).first()
+                student = self.session.query(Student).filter_by(UserID=user.UserID).first()
                 if student:
-                    group = session.query(StudentGroup).filter_by(GroupID=student.GroupID).first()
+                    group = self.session.query(StudentGroup).filter_by(GroupID=student.GroupID).first()
                     student_info = {
                         'student_id': student.StudentID,
                         'group_name': group.GroupName if group else 'Невідома група'
@@ -94,8 +91,7 @@ class PersonalQARepository:
             True у разі успіху, False у разі невдачі
         """
         try:
-            with self.get_session() as session:
-                question = session.query(PersonalQuestion).filter_by(QuestionID=question_id).first()
+                question = self.session.query(PersonalQuestion).filter_by(QuestionID=question_id).first()
 
                 if not question:
                     return False
@@ -104,28 +100,27 @@ class PersonalQARepository:
                 question.Status = 'answered'
                 question.AnsweredBy = answered_by_id
 
-                session.commit()
+                self.session.commit()
                 return True
         except Exception:
             return False
 
     def get_student_chat_id(self, question_id: int):
-        """
-        Отримує chat_id студента, який задав запитання, для відправки йому відповіді.
+            """
+            Отримує chat_id студента, який задав запитання, для відправки йому відповіді.
 
-        Args:
-            question_id: ID запитання
+            Args:
+                question_id: ID запитання
 
-        Returns:
-            chat_id студента або None
-        """
-        with self.get_session() as session:
-            question = session.query(PersonalQuestion).filter_by(QuestionID=question_id).first()
+            Returns:
+                chat_id студента або None
+            """
+            question = self.session.query(PersonalQuestion).filter_by(QuestionID=question_id).first()
 
             if not question:
                 return None
 
-            user = session.query(User).filter_by(UserID=question.UserID).first()
+            user = self.session.query(User).filter_by(UserID=question.UserID).first()
 
             if user and user.ChatID:
                 return user.ChatID

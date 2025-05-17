@@ -5,21 +5,14 @@ from source.controllers.BaseController import BaseController
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import CallbackContext, CommandHandler, CallbackQueryHandler, MessageHandler, filters
 
-class DocumentController:
+class DocumentController(BaseController):
     def __init__(self, application, document_service):
-        self.application = application
+        super().__init__(application)  # Викликаємо конструктор базового класу
         self.document_service = document_service
-        self.WAITING_FOR_SCAN_LINK = 1  # Константа для стану очікування посилання на скан
-
-        # DON'T register handlers here - moved to a separate method
-        # that's called selectively
+        self.WAITING_FOR_SCAN_LINK = 1
 
     def register_handlers(self):
         """Реєстрація обробників callback-ів."""
-        # Remove the generic text handler - this will be handled by MenuController
-        # self.application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self.receive_scan_link))
-
-        # Callback кнопки
         self.application.add_handler(CallbackQueryHandler(self.select_document, pattern="^doc_select_"))
         self.application.add_handler(CallbackQueryHandler(self.confirm_document_request, pattern="^doc_confirm_"))
         self.application.add_handler(CallbackQueryHandler(self.cancel_document_request, pattern="^cancel_doc$"))

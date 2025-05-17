@@ -1,19 +1,12 @@
 from sqlalchemy.exc import SQLAlchemyError
 from source.config import logger
 from source.models import Course, Teacher, User, CourseEnrollment, Student, StudentGroup, Specialty
+from source.repositories.BaseRepository import BaseRepository
 
 
-class CourseRepository:
+class CourseRepository(BaseRepository):
     """Репозиторій для роботи з курсами в базі даних."""
 
-    def __init__(self, get_session):
-        """
-        Ініціалізує CourseRepository.
-
-        Args:
-            get_session: Функція, яка повертає сесію SQLAlchemy.
-        """
-        self.get_session = get_session
 
     def get_student_courses(self, telegram_tag: str, active_only: bool = True) -> list[dict]:
         """
@@ -27,16 +20,15 @@ class CourseRepository:
             Список курсів з інформацією про викладача та деталями курсу
         """
         try:
-            with self.get_session() as session:
                 # Знаходимо студента за telegram_tag
-                student = session.query(Student).join(User, User.UserID == Student.UserID) \
+                student = self.session.query(Student).join(User, User.UserID == Student.UserID) \
                     .filter(User.TelegramTag == telegram_tag).first()
 
                 if not student:
                     return []
 
                 # Запит для отримання курсів через CourseEnrollment
-                courses_query = session.query(
+                courses_query = self.session.query(
                     Course.CourseID,
                     Course.Name.label("course_name"),
                     Course.StudyPlatform,
@@ -92,16 +84,15 @@ class CourseRepository:
             Список курсів з їх деталями
         """
         try:
-            with self.get_session() as session:
                 # Знаходимо викладача за Telegram тегом
-                teacher = session.query(Teacher).join(User, User.UserID == Teacher.UserID) \
+                teacher = self.session.query(Teacher).join(User, User.UserID == Teacher.UserID) \
                     .filter(User.TelegramTag == telegram_tag).first()
 
                 if not teacher:
                     return []
 
                 # Запит для отримання курсів викладача
-                courses_query = session.query(
+                courses_query = self.session.query(
                     Course.CourseID,
                     Course.Name.label("course_name"),
                     Course.StudyPlatform,
@@ -145,9 +136,8 @@ class CourseRepository:
             Список студентів з їх деталями
         """
         try:
-            with self.get_session() as session:
                 # Запит для отримання студентів на курсі
-                students_query = session.query(
+                students_query = self.session.query(
                     User.UserName.label("student_name"),
                     User.PhoneNumber.label("student_phone"),
                     User.TelegramTag.label("telegram_tag")
@@ -187,9 +177,25 @@ class CourseRepository:
             ID викладача або None, якщо викладача не знайдено
         """
         try:
-            with self.get_session() as session:
-                teacher = session.query(Teacher).join(User).filter(User.TelegramTag == username).first()
+                teacher = self.session.query(Teacher).join(User).filter(User.TelegramTag == username).first()
                 return teacher.TeacherID if teacher else None
+        except SQLAlchemyError as e:
+            logger.exception(f"Помилка при отриманні ID викладача: {e}")
+            return None
+
+    def get_student_id_by_username(self, username: str) -> int:
+        """
+        Отримує ID викладача за телеграм-тегом.
+
+        Args:
+            username: Телеграм-тег викладача
+
+        Returns:
+            ID викладача або None, якщо викладача не знайдено
+        """
+        try:
+                student = self.session.query(Student).join(User).filter(User.TelegramTag == username).first()
+                return student.StudentID if student else None
         except SQLAlchemyError as e:
             logger.exception(f"Помилка при отриманні ID викладача: {e}")
             return None
@@ -203,8 +209,7 @@ class CourseRepository:
             Список груп студентів з їх деталями
         """
         try:
-            with self.get_session() as session:
-                groups = session.query(
+                groups = self.session.query(
                     StudentGroup.GroupID,
                     StudentGroup.GroupName,
                     Specialty.Name.label("specialty_name")
@@ -239,9 +244,8 @@ class CourseRepository:
             Список студентів з їх деталями
         """
         try:
-            with self.get_session() as session:
                 # Запит для отримання всіх студентів з вказаної групи
-                students = session.query(
+                students = self.session.query(
                     Student.StudentID,
                     User.UserName,
                     User.TelegramTag,
@@ -279,9 +283,8 @@ class CourseRepository:
             True, якщо студент успішно доданий, інакше False
         """
         try:
-            with self.get_session() as session:
                 # Перевіряємо, чи існує вже такий запис
-                existing_enrollment = session.query(CourseEnrollment).filter(
+                existing_enrollment = self.session.query(CourseEnrollment).filter(
                     CourseEnrollment.StudentID == student_id,
                     CourseEnrollment.CourseID == course_id
                 ).first()
@@ -295,8 +298,8 @@ class CourseRepository:
                     CourseID=course_id
                 )
 
-                session.add(new_enrollment)
-                session.commit()
+                self.session.add(new_enrollment)
+                self.session.commit()
 
                 return True
         except Exception as e:
@@ -315,9 +318,8 @@ class CourseRepository:
             True, якщо студент успішно видалений, інакше False
         """
         try:
-            with self.get_session() as session:
                 # Знаходимо запис про зарахування
-                enrollment = session.query(CourseEnrollment).filter(
+                enrollment = self.session.query(CourseEnrollment).filter(
                     CourseEnrollment.StudentID == student_id,
                     CourseEnrollment.CourseID == course_id
                 ).first()
@@ -326,8 +328,8 @@ class CourseRepository:
                     return False  # Студент не зарахований на курс
 
                 # Видаляємо запис
-                session.delete(enrollment)
-                session.commit()
+                self.session.delete(enrollment)
+                self.session.commit()
 
                 return True
         except Exception as e:
@@ -345,8 +347,7 @@ class CourseRepository:
             ID студента або None, якщо студента не знайдено
         """
         try:
-            with self.get_session() as session:
-                student = session.query(Student).join(
+                student = self.session.query(Student).join(
                     User, Student.UserID == User.UserID
                 ).filter(
                     User.TelegramTag == telegram_tag
@@ -373,7 +374,6 @@ class CourseRepository:
                     ID створеного курсу або None у випадку помилки
                 """
             try:
-                with self.get_session() as session:
                     new_course = Course(
                         Name=name,
                         StudyPlatform=study_platform,
@@ -381,8 +381,8 @@ class CourseRepository:
                         TeacherID=teacher_id,
                         IsActive=True
                     )
-                    session.add(new_course)
-                    session.commit()
+                    self.session.add(new_course)
+                    self.session.commit()
                     return new_course.CourseID
             except SQLAlchemyError as e:
                 logger.exception(f"Помилка при створенні курсу: {e}")
@@ -399,11 +399,10 @@ class CourseRepository:
             True якщо архівація пройшла успішно, інакше False
         """
         try:
-            with self.get_session() as session:
-                course = session.query(Course).filter(Course.CourseID == course_id).first()
+                course = self.session.query(Course).filter(Course.CourseID == course_id).first()
                 if course:
                     course.IsActive = False
-                    session.commit()
+                    self.session.commit()
                     return True
                 return False
         except SQLAlchemyError as e:

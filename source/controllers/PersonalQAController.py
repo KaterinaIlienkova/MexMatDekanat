@@ -4,20 +4,24 @@ from telegram.ext import (
     ConversationHandler, CallbackContext, filters
 )
 
-class PersonalQAController:
+from source.controllers.BaseController import BaseController
+
+
+class PersonalQAController(BaseController):
+    # Стани розмови для студента
+    WAITING_FOR_QUESTION_TEXT = 1
+    WAITING_FOR_QUESTION_CONFIRMATION = 2
+
+    # Стани розмови для працівника деканату
+    VIEWING_QUESTIONS_LIST = 3
+    WAITING_FOR_ANSWER_TEXT = 4
+    WAITING_FOR_ANSWER_CONFIRMATION = 5
+
     def __init__(self, application, personal_qa_service, auth_service):
-        self.application = application
+        super().__init__(application)
         self.personal_qa_service = personal_qa_service
         self.auth_service = auth_service
 
-        # Стани розмови для студента
-        self.WAITING_FOR_QUESTION_TEXT = 1
-        self.WAITING_FOR_QUESTION_CONFIRMATION = 2
-
-        # Стани розмови для працівника деканату
-        self.VIEWING_QUESTIONS_LIST = 3
-        self.WAITING_FOR_ANSWER_TEXT = 4
-        self.WAITING_FOR_ANSWER_CONFIRMATION = 5
 
     def register_handlers(self):
         """Реєстрація обробників для функціоналу персональних запитань."""
@@ -106,8 +110,14 @@ class PersonalQAController:
         chat_id = update.effective_user.id
         question_text = context.user_data['question_data']['text']
 
-        user = await self.auth_service.get_user_by_chat_id(chat_id)
-        user_id = user.UserID
+        user_data = await self.auth_service.get_user_by_chat_id(chat_id)
+        if not user_data:
+            await query.edit_message_text(
+                "❌ Помилка автентифікації. Спробуйте ще раз."
+            )
+            return ConversationHandler.END
+
+        user_id = user_data['UserID']
         # Зберігаємо запитання в базі даних
         result = self.personal_qa_service.submit_question(user_id, question_text)
 
@@ -157,9 +167,9 @@ class PersonalQAController:
         """Показує список невідповідених запитань студентів."""
         # Перевіряємо, чи має користувач роль dean_office
         chat_id = update.effective_user.id
-        user = await self.auth_service.get_user_by_chat_id(chat_id)
+        user_data = await self.auth_service.get_user_by_chat_id(chat_id)
 
-        if not user or user.Role != 'dean_office':
+        if not user_data or user_data['Role'] != 'dean_office':
             await update.effective_message.reply_text(
                 "❌ У вас немає доступу до цієї функції."
             )
@@ -187,7 +197,7 @@ class PersonalQAController:
         reply_markup = InlineKeyboardMarkup(keyboard)
 
         await update.effective_message.reply_text(
-            "📝 Список невідповідених запитань від студентів:\n"
+            "📝 Список запитань від студентів, які чекають на відповідь:\n"
             "Виберіть запитання, щоб надати відповідь:",
             reply_markup=reply_markup
         )
@@ -268,17 +278,17 @@ class PersonalQAController:
         question_id = context.user_data['answer_data']['question_id']
         answer_text = context.user_data['answer_data']['text']
 
-        # Отримуємо ID користувача
-        user = await self.auth_service.get_user_by_chat_id(chat_id)
+        # Отримуємо інформацію про користувача
+        user_data = await self.auth_service.get_user_by_chat_id(chat_id)
 
-        if not user:
+        if not user_data:
             await query.edit_message_text(
                 "❌ Помилка автентифікації. Спробуйте ще раз."
             )
             return ConversationHandler.END
 
         # Зберігаємо відповідь в базі даних
-        result = self.personal_qa_service.answer_question(question_id, answer_text, user.UserID)
+        result = self.personal_qa_service.answer_question(question_id, answer_text, user_data['UserID'])
 
         if result['success']:
             await query.edit_message_text(

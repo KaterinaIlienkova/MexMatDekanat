@@ -5,20 +5,18 @@ from datetime import datetime
 import logging
 
 from source.models import CourseEnrollment, StudentGroup, User, Student, Course, Teacher, Specialty, Department
+from source.repositories.BaseRepository import BaseRepository
 
 # Налаштування логера
 logger = logging.getLogger(__name__)
 
 
-class AnnouncementRepository:
-    def __init__(self, get_session):
-        self.get_session = get_session
+class AnnouncementRepository(BaseRepository):
 
     def get_all_teachers(self) -> List[Dict[str, Any]]:
         """Отримати всіх викладачів для розсилки оголошень."""
         try:
-            with self.get_session() as session:
-                teachers = session.query(
+                teachers = self.session.query(
                     User.UserID,
                     User.UserName,
                     User.TelegramTag,
@@ -53,8 +51,7 @@ class AnnouncementRepository:
     def get_teachers_by_department(self, department_id: int) -> List[Dict[str, Any]]:
         """Отримати викладачів конкретної кафедри для розсилки оголошень."""
         try:
-            with self.get_session() as session:
-                teachers = session.query(
+                teachers = self.session.query(
                     User.UserID,
                     User.UserName,
                     User.TelegramTag,
@@ -86,8 +83,7 @@ class AnnouncementRepository:
     def get_teachers_by_ids(self, teacher_ids: List[int]) -> List[Dict[str, Any]]:
         """Отримати викладачів за списком ID для розсилки оголошень."""
         try:
-            with self.get_session() as session:
-                teachers = session.query(
+                teachers = self.session.query(
                     User.UserID,
                     User.UserName,
                     User.TelegramTag,
@@ -119,8 +115,7 @@ class AnnouncementRepository:
     def get_all_departments(self) -> List[Dict[str, Any]]:
         """Отримати список всіх кафедр для вибору розсилки."""
         try:
-            with self.get_session() as session:
-                departments = session.query(
+                departments = self.session.query(
                     Department.DepartmentID,
                     Department.Name
                 ).all()
@@ -139,8 +134,7 @@ class AnnouncementRepository:
     def get_department_by_name(self, department_name: str) -> Optional[Department]:
         """Отримати кафедру за назвою."""
         try:
-            with self.get_session() as session:
-                return session.query(Department).filter_by(Name=department_name).first()
+                return self.session.query(Department).filter_by(Name=department_name).first()
         except SQLAlchemyError as e:
             logger.error(f"Database error when getting department by name: {e}")
             return None
@@ -148,8 +142,7 @@ class AnnouncementRepository:
     def get_all_student_groups(self) -> List[Dict[str, Any]]:
         """Отримати список всіх груп студентів для вибору розсилки."""
         try:
-            with self.get_session() as session:
-                groups = session.query(
+                groups = self.session.query(
                     StudentGroup.GroupID,
                     StudentGroup.GroupName,
                     Specialty.Name.label('SpecialtyName')
@@ -172,8 +165,7 @@ class AnnouncementRepository:
     def get_student_group_by_name(self, group_name: str) -> Optional[StudentGroup]:
         """Отримує групу за назвою."""
         try:
-            with self.get_session() as session:
-                return session.query(StudentGroup).filter_by(GroupName=group_name).first()
+                return self.session.query(StudentGroup).filter_by(GroupName=group_name).first()
         except SQLAlchemyError as e:
             logger.error(f"Database error when getting student group by name: {e}")
             return None
@@ -181,8 +173,7 @@ class AnnouncementRepository:
     def get_all_specialties(self) -> List[Dict[str, Any]]:
         """Отримати список всіх спеціальностей для вибору розсилки."""
         try:
-            with self.get_session() as session:
-                specialties = session.query(
+                specialties = self.session.query(
                     Specialty.SpecialtyID,
                     Specialty.Name
                 ).all()
@@ -201,8 +192,7 @@ class AnnouncementRepository:
     def get_specialty_by_name(self, specialty_name: str) -> Optional[Specialty]:
         """Отримати спеціальність за назвою."""
         try:
-            with self.get_session() as session:
-                return session.query(Specialty).filter_by(Name=specialty_name).first()
+                return self.session.query(Specialty).filter_by(Name=specialty_name).first()
         except SQLAlchemyError as e:
             logger.error(f"Database error when getting specialty by name: {e}")
             return None
@@ -210,8 +200,7 @@ class AnnouncementRepository:
     def get_students_by_group(self, group_id: int) -> List[Dict[str, Any]]:
         """Отримати студентів конкретної групи для розсилки оголошень."""
         try:
-            with self.get_session() as session:
-                students = session.query(
+                students = self.session.query(
                     User.UserID,
                     User.UserName,
                     User.TelegramTag,
@@ -247,8 +236,7 @@ class AnnouncementRepository:
     def get_students_by_specialty(self, specialty_id: int) -> List[Dict[str, Any]]:
         """Отримати студентів конкретної спеціальності для розсилки оголошень."""
         try:
-            with self.get_session() as session:
-                students = session.query(
+                students = self.session.query(
                     User.UserID,
                     User.UserName,
                     User.TelegramTag,
@@ -299,8 +287,7 @@ class AnnouncementRepository:
             # Визначаємо рік вступу для потрібного курсу
             admission_year = academic_year_start - course_year + 1
 
-            with self.get_session() as session:
-                students = session.query(
+            students = self.session.query(
                     User.UserID,
                     User.UserName,
                     User.TelegramTag,
@@ -319,7 +306,7 @@ class AnnouncementRepository:
                     Student.AdmissionYear == admission_year
                 ).all()
 
-                return [
+            return [
                     {
                         'user_id': s.UserID,
                         'username': s.UserName,
@@ -341,8 +328,7 @@ class AnnouncementRepository:
     def get_students_by_ids(self, student_ids: List[int]) -> List[Dict[str, Any]]:
         """Отримати студентів за списком ID для розсилки оголошень."""
         try:
-            with self.get_session() as session:
-                students = session.query(
+                students = self.session.query(
                     User.UserID,
                     User.UserName,
                     User.TelegramTag,
@@ -378,8 +364,7 @@ class AnnouncementRepository:
     def get_all_students(self) -> List[Dict[str, Any]]:
         """Отримати всіх студентів для розсилки оголошень."""
         try:
-            with self.get_session() as session:
-                students = session.query(
+                students = self.session.query(
                     User.UserID,
                     User.UserName,
                     User.TelegramTag,
@@ -416,8 +401,7 @@ class AnnouncementRepository:
     def get_all_courses(self) -> List[Dict[str, Any]]:
         """Отримати список всіх курсів для вибору розсилки."""
         try:
-            with self.get_session() as session:
-                courses = session.query(
+                courses = self.session.query(
                     Course.CourseID,
                     Course.Name,
                     User.UserName.label('TeacherName')
@@ -444,8 +428,7 @@ class AnnouncementRepository:
     def get_course_by_name(self, course_name: str) -> Optional[Course]:
         """Отримати курс за назвою."""
         try:
-            with self.get_session() as session:
-                return session.query(Course).filter_by(Name=course_name).first()
+                return self.session.query(Course).filter_by(Name=course_name).first()
         except SQLAlchemyError as e:
             logger.error(f"Database error when getting course by name: {e}")
             return None
@@ -453,8 +436,7 @@ class AnnouncementRepository:
     def get_students_by_course_enrollment(self, course_id: int) -> List[Dict[str, Any]]:
         """Отримати студентів, записаних на конкретний курс, для розсилки оголошень."""
         try:
-            with self.get_session() as session:
-                students = session.query(
+                students = self.session.query(
                     User.UserID,
                     User.UserName,
                     User.TelegramTag,
@@ -496,16 +478,15 @@ class AnnouncementRepository:
     def get_teacher_courses(self, telegram_tag: str, active_only: bool = True) -> list[dict]:
 
         try:
-            with self.get_session() as session:
                 # Знаходимо викладача за Telegram тегом
-                teacher = session.query(Teacher).join(User, User.UserID == Teacher.UserID) \
+                teacher = self.session.query(Teacher).join(User, User.UserID == Teacher.UserID) \
                     .filter(User.TelegramTag == telegram_tag).first()
 
                 if not teacher:
                     return []
 
                     # Запит для отримання курсів викладача
-                courses_query = session.query(
+                courses_query = self.session.query(
                     Course.CourseID,
                     Course.Name.label("course_name"),
                     Course.StudyPlatform,
@@ -525,7 +506,7 @@ class AnnouncementRepository:
                 for course in courses:
                     course_dict = {
                         "course_id": course.CourseID,
-                        "course_name": course.course_name,
+                        "name": course.course_name,
                         "study_platform": course.StudyPlatform or "Не вказано",
                         "meeting_link": course.MeetingLink or "Не вказано",
                         "is_active": course.IsActive
@@ -538,46 +519,28 @@ class AnnouncementRepository:
             logger.exception(f"Помилка при отриманні курсів викладача: {str(e)}")
             return []
 
-
-
-    def get_course_students(self, course_id: int) -> list[dict]:
-        """
-        Отримує список студентів на конкретному курсі за його ID.
-
-        Args:
-            course_id: ID курсу
-
-        Returns:
-            Список студентів з їх деталями
-        """
+    def get_course_students(self, course_id: int) -> List[Dict[str, Any]]:
         try:
-            with self.get_session() as session:
-                # Запит для отримання студентів на курсі
-                students_query = session.query(
+                students = self.session.query(
+                    Student.StudentID.label("student_id"),
                     User.UserName.label("student_name"),
-                    User.PhoneNumber.label("student_phone"),
-                    User.TelegramTag.label("telegram_tag")
-                ).join(
-                    Student, Student.UserID == User.UserID
-                ).join(
-                    CourseEnrollment, CourseEnrollment.StudentID == Student.StudentID
-                ).filter(
-                    CourseEnrollment.CourseID == course_id
-                )
+                    User.TelegramTag.label("telegram_tag"),
+                    StudentGroup.GroupName.label("group_name")
+                ).join(User, User.UserID == Student.UserID) \
+                    .join(StudentGroup, StudentGroup.GroupID == Student.GroupID) \
+                    .join(CourseEnrollment, CourseEnrollment.StudentID == Student.StudentID) \
+                    .filter(CourseEnrollment.CourseID == course_id) \
+                    .all()
 
-                students = students_query.all()
-
-                students_list = []
-                for student in students:
-                    student_dict = {
+                return [
+                    {
+                        "student_id": student.student_id,
                         "student_name": student.student_name,
-                        "student_phone": student.student_phone or "Не вказано",
-                        "telegram_tag": student.telegram_tag
+                        "telegram_tag": student.telegram_tag,
+                        "group_name": student.group_name
                     }
-                    students_list.append(student_dict)
-
-                return students_list
-
+                    for student in students
+                ]
         except Exception as e:
-            logger.exception(f"Помилка при отриманні студентів на курсі: {str(e)}")
+            logger.exception(f"Помилка при отриманні студентів курсу: {str(e)}")
             return []

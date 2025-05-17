@@ -1,5 +1,7 @@
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import CallbackContext, CallbackQueryHandler, Application
+
+from source.controllers.BaseController import BaseController
 from source.services import FAQService
 import logging
 
@@ -12,7 +14,7 @@ WAITING_FOR_QUESTION = 'waiting_for_question'
 WAITING_FOR_ANSWER = 'waiting_for_answer'
 WAITING_FOR_EDIT_ANSWER = 'waiting_for_edit_answer'
 
-class FAQController:
+class FAQController(BaseController):
     """Контролер для роботи з FAQ в телеграм боті."""
 
     def __init__(self, application: Application, faq_service: FAQService):
@@ -23,7 +25,7 @@ class FAQController:
             application: Об'єкт додатку telegram.
             faq_service: Сервіс для роботи з FAQ.
         """
-        self.application = application
+        super().__init__(application)
         self.faq_service = faq_service
 
         # Реєстрація обробників

@@ -4,12 +4,14 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import CallbackContext, CommandHandler, MessageHandler, CallbackQueryHandler, ConversationHandler, \
     filters
 from telegram.ext import ContextTypes
+
+from source.controllers.BaseController import BaseController
 from source.services import AuthService
 
 logger = logging.getLogger(__name__)
 
 
-class AuthController:
+class AuthController(BaseController):
 
     WAITING_FOR_USER_DETAILS = "WAITING_FOR_USER_DETAILS"
     # Стани для ConversationHandler
@@ -50,7 +52,7 @@ class AuthController:
     WAITING_FOR_DELETE_CONFIRMATION = 25
 
     def __init__(self, application, auth_service: AuthService):
-        self.application = application
+        super().__init__(application)
         self.auth_service = auth_service
 
     def register_handlers(self):

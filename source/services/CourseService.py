@@ -3,16 +3,8 @@ from typing import List, Dict, Any
 
 class CourseService:
     """Сервіс для роботи з курсами."""
-
-    def __init__(self, course_repository, announce_repository):
-        """
-        Ініціалізує CourseService.
-
-        Args:
-            course_repository: Репозиторій для роботи з курсами.
-        """
-        self.course_repository = course_repository
-        self.announce_repository=announce_repository
+    def __init__(self, uow_factory):
+        self.uow_factory = uow_factory
 
     def get_student_courses(self, telegram_tag: str, active_only: bool = True) -> list[dict]:
         """
@@ -25,7 +17,8 @@ class CourseService:
         Returns:
             Список курсів з інформацією про викладачів
         """
-        return self.course_repository.get_student_courses(telegram_tag, active_only)
+        with self.uow_factory() as uow:
+            return uow.course_repository.get_student_courses(telegram_tag, active_only)
 
     def get_teacher_courses(self, telegram_tag: str, active_only: bool = True) -> list[dict]:
         """
@@ -38,7 +31,8 @@ class CourseService:
         Returns:
             Список курсів викладача
         """
-        return self.course_repository.get_teacher_courses(telegram_tag, active_only)
+        with self.uow_factory() as uow:
+            return uow.course_repository.get_teacher_courses(telegram_tag, active_only)
 
     def get_course_students(self, course_id: int) -> list[dict]:
         """
@@ -50,7 +44,8 @@ class CourseService:
         Returns:
             Список студентів на курсі
         """
-        return self.course_repository.get_course_students(course_id)
+        with self.uow_factory() as uow:
+            return uow.course_repository.get_course_students(course_id)
 
     def is_teacher(self, telegram_tag: str) -> bool:
         """
@@ -62,8 +57,21 @@ class CourseService:
         Returns:
             True якщо користувач є викладачем, інакше False
         """
-        return self.course_repository.get_teacher_id_by_username(telegram_tag) is not None
+        with self.uow_factory() as uow:
+            return uow.course_repository.get_teacher_id_by_username(telegram_tag) is not None
 
+    def is_student(self, telegram_tag: str) -> bool:
+        """
+        Перевіряє, чи є користувач викладачем.
+
+        Args:
+            telegram_tag: Телеграм тег користувача
+
+        Returns:
+            True якщо користувач є викладачем, інакше False
+        """
+        with self.uow_factory() as uow:
+            return uow.course_repository.get_student_id_by_username(telegram_tag) is not None
 
 
     def get_all_student_groups(self) -> list[dict]:
@@ -73,7 +81,8 @@ class CourseService:
         Returns:
             Список груп студентів з їх деталями
         """
-        return self.course_repository.get_all_student_groups()
+        with self.uow_factory() as uow:
+            return uow.course_repository.get_all_student_groups()
 
     def get_available_students_for_course(self, group_id: int, course_id: int) -> list[dict]:
         """
@@ -86,7 +95,8 @@ class CourseService:
         Returns:
             Список студентів з їх деталями
         """
-        return self.course_repository.get_available_students_for_course(group_id, course_id)
+        with self.uow_factory() as uow:
+            return uow.course_repository.get_available_students_for_course(group_id, course_id)
 
     def add_student_to_course(self, student_id: int, course_id: int) -> bool:
         """
@@ -99,7 +109,8 @@ class CourseService:
         Returns:
             True, якщо студент успішно доданий, інакше False
         """
-        return self.course_repository.add_student_to_course(student_id, course_id)
+        with self.uow_factory() as uow:
+            return uow.course_repository.add_student_to_course(student_id, course_id)
 
     def remove_student_from_course(self, student_id: int, course_id: int) -> bool:
         """
@@ -112,7 +123,8 @@ class CourseService:
         Returns:
             True, якщо студент успішно видалений, інакше False
         """
-        return self.course_repository.remove_student_from_course(student_id, course_id)
+        with self.uow_factory() as uow:
+            return uow.course_repository.remove_student_from_course(student_id, course_id)
 
     def get_student_id_by_telegram(self, telegram_tag: str) -> int:
         """
@@ -124,7 +136,8 @@ class CourseService:
         Returns:
             ID студента або None, якщо студента не знайдено
         """
-        return self.course_repository.get_student_id_by_telegram(telegram_tag)
+        with self.uow_factory() as uow:
+            return uow.course_repository.get_student_id_by_telegram(telegram_tag)
 
     def get_all_students_by_group(self, group_id: int) -> List[Dict[str, Any]]:
         """
@@ -136,7 +149,8 @@ class CourseService:
         Returns:
             Список студентів групи з їх деталями
         """
-        return self.course_repository.get_all_students_by_group(group_id)  # ПРАВИЛЬНА НАЗВА МЕТОДУ
+        with self.uow_factory() as uow:
+            return uow.course_repository.get_all_students_by_group(group_id)  # ПРАВИЛЬНА НАЗВА МЕТОДУ
 
 
 
@@ -153,11 +167,12 @@ class CourseService:
         Returns:
             True якщо курс створено успішно, інакше False
         """
-        teacher_id = self.course_repository.get_teacher_id_by_username(telegram_tag)
-        if not teacher_id:
-            return False
+        with self.uow_factory() as uow:
+            teacher_id = uow.course_repository.get_teacher_id_by_username(telegram_tag)
+            if not teacher_id:
+                return False
 
-        return self.course_repository.create_course(teacher_id, name, study_platform, meeting_link) is not None
+            return uow.course_repository.create_course(teacher_id, name, study_platform, meeting_link) is not None
 
     def archive_course(self, course_id: int) -> bool:
         """
@@ -169,4 +184,5 @@ class CourseService:
         Returns:
             True якщо архівація пройшла успішно, інакше False
         """
-        return self.course_repository.archive_course(course_id)
+        with self.uow_factory() as uow:
+            return uow.course_repository.archive_course(course_id)

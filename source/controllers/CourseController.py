@@ -2,12 +2,13 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKe
 from telegram.ext import ContextTypes, CallbackContext, ConversationHandler, CommandHandler, MessageHandler, filters, CallbackQueryHandler
 from telegram.ext import CallbackContext, CallbackQueryHandler, Application
 
+from source.controllers.BaseController import BaseController
 from source.services.CourseService import CourseService
 
 
 
 
-class CourseController:
+class CourseController(BaseController):
     WAITING_FOR_COURSE_NAME = "waiting_for_course_name"
     WAITING_FOR_PLATFORM = "waiting_for_platform"
     WAITING_FOR_LINK = "waiting_for_link"
@@ -21,7 +22,7 @@ class CourseController:
             application: Об'єкт Telegram Application
             course_service: Сервіс для роботи з курсами
         """
-        self.application = application
+        super().__init__(application)
         self.course_service = course_service
 
     def register_handlers(self):
@@ -91,6 +92,8 @@ class CourseController:
     async def view_student_courses(self, update: Update, context: CallbackContext):
         """
         Показує список курсів студента у вигляді повідомлення.
+        Перевіряє, чи зареєстрований користувач як студент,
+        та показує лише ті курси, на які він записаний.
         """
         try:
             user = update.effective_user
@@ -99,11 +102,26 @@ class CourseController:
             # Логування для діагностики
             print(f"view_student_courses викликано для користувача: {telegram_tag}")
 
-            # Отримуємо курси студента
+            # Перевіряємо, чи користувач є студентом
+            if not self.course_service.is_student(telegram_tag):
+                # Якщо виклик з повідомлення
+                if update.message:
+                    await update.message.reply_text("Ви не зареєстровані як студент.")
+                # Якщо виклик з callback_query
+                elif update.callback_query:
+                    await update.callback_query.edit_message_text("Ви не зареєстровані як студент.")
+                return
+
+            # Отримуємо ТІЛЬКИ ті курси, на які студент записаний
             courses = self.course_service.get_student_courses(telegram_tag, active_only=True)
 
             if not courses:
-                await update.message.reply_text("У вас немає активних курсів або ви не зареєстровані як студент.")
+                # Якщо виклик з повідомлення
+                if update.message:
+                    await update.message.reply_text("У вас немає активних курсів.")
+                # Якщо виклик з callback_query
+                elif update.callback_query:
+                    await update.callback_query.edit_message_text("У вас немає активних курсів.")
                 return
 
             # Створюємо клавіатуру з курсами
@@ -116,18 +134,27 @@ class CourseController:
 
             reply_markup = InlineKeyboardMarkup(keyboard)
 
-            # Відправляємо повідомлення з кнопками
-            await update.message.reply_text(
-                "📚 Ваші поточні курси. Натисніть на курс для детальної інформації:",
-                reply_markup=reply_markup
-            )
+            message_text = "📚 Ваші поточні курси. Натисніть на курс для детальної інформації:"
+
+            # Визначаємо, чи виклик з повідомлення чи з callback_query
+            if update.message:
+                await update.message.reply_text(message_text, reply_markup=reply_markup)
+            elif update.callback_query:
+                await update.callback_query.edit_message_text(message_text, reply_markup=reply_markup)
         except Exception as e:
             print(f"Помилка у view_student_courses: {e}")
-            await update.message.reply_text("Сталася помилка при отриманні списку курсів.")
+            error_message = "Сталася помилка при отриманні списку курсів."
+
+            # Визначаємо, чи виклик з повідомлення чи з callback_query
+            if update.message:
+                await update.message.reply_text(error_message)
+            elif update.callback_query:
+                await update.callback_query.edit_message_text(error_message)
 
     async def view_course_details(self, update: Update, context: CallbackContext):
         """
         Показує детальну інформацію про курс для студента.
+        Перевіряє, чи має студент доступ до цього курсу.
         """
         query = update.callback_query
         await query.answer()
@@ -140,15 +167,18 @@ class CourseController:
             return
 
         course_id = int(callback_parts[1])
+        username = query.from_user.username
 
-        # Отримуємо всі курси студента
-        courses = self.course_service.get_student_courses(query.from_user.username, active_only=True)
+        # Отримуємо всі курси студента (тільки ті, на які він записаний)
+        courses = self.course_service.get_student_courses(username, active_only=True)
 
         # Знаходимо потрібний курс за ID
         course = next((c for c in courses if c["course_id"] == course_id), None)
 
         if not course:
-            await query.edit_message_text("Інформація про курс не знайдена.")
+            # Якщо курс не знайдено в списку курсів студента,
+            # значить студент не має доступу до цього курсу
+            await query.edit_message_text("У вас немає доступу до цього курсу або він не існує.")
             return
 
         # Формуємо повідомлення з деталями курсу
@@ -172,34 +202,84 @@ class CourseController:
 
     async def back_to_courses_list(self, update: Update, context: CallbackContext):
         """
-        Повертає студента до списку його курсів.
+        Повертає користувача до списку його курсів залежно від ролі (студент або викладач).
+        Важливо: перевіряє джерело повернення та роль користувача для правильної навігації.
         """
         query = update.callback_query
         await query.answer()
 
-        # Отримуємо курси студента
-        courses = self.course_service.get_student_courses(query.from_user.username, active_only=True)
+        username = query.from_user.username
 
-        if not courses:
-            await query.edit_message_text("У вас немає активних курсів.")
-            return
+        # Перевіряємо ролі користувача
+        is_teacher = self.course_service.is_teacher(username)
+        is_student = self.course_service.is_student(username)
 
-        # Створюємо клавіатуру з курсами
-        keyboard = []
-        for course in courses:
-            keyboard.append([InlineKeyboardButton(
-                course["course_name"],
-                callback_data=f"studentcourse_{course['course_id']}"
-            )])
+        # Визначаємо джерело навігації
+        # Студентський вид - текст містить форматування Markdown з назвою курсу та іншими деталями
+        coming_from_student_view = query.message.text and "*" in query.message.text and "📚" in query.message.text
 
-        reply_markup = InlineKeyboardMarkup(keyboard)
+        # Викладацький вид - текст містить HTML форматування зі списком студентів курсу
+        coming_from_teacher_view = query.message.text and ("<b>Студенти курсу:" in query.message.text or
+                                                           "На курсі <b>" in query.message.text)
 
-        await query.edit_message_text(
-            "📚 Ваші поточні курси. Натисніть на курс для детальної інформації:",
-            reply_markup=reply_markup
-        )
+        # Для дебагу
+        print(f"User: {username}, is_teacher: {is_teacher}, is_student: {is_student}")
+        print(f"Coming from student view: {coming_from_student_view}")
+        print(f"Coming from teacher view: {coming_from_teacher_view}")
 
+        # Отримуємо ID курсу з контексту, якщо це можливо
+        current_course_id = context.user_data.get("current_course_id")
+        print(f"Current course ID from context: {current_course_id}")
 
+        # Користувач є викладачем і повертається з викладацького представлення
+        # АБО користувач є лише викладачем (не студентом)
+        if (is_teacher and coming_from_teacher_view) or (is_teacher and not is_student):
+            courses = self.course_service.get_teacher_courses(username, active_only=True)
+
+            if not courses:
+                await query.edit_message_text("У вас немає активних курсів.")
+                return
+
+            # Створюємо клавіатуру з курсами викладача
+            keyboard = []
+            for course in courses:
+                keyboard.append([InlineKeyboardButton(
+                    course["course_name"],
+                    callback_data=f"teachercourse_{course['course_id']}"
+                )])
+
+            reply_markup = InlineKeyboardMarkup(keyboard)
+
+            await query.edit_message_text(
+                "📚 Ваші поточні курси. Натисніть на курс для перегляду студентів:",
+                reply_markup=reply_markup
+            )
+
+        # Користувач є студентом і повертається зі студентського представлення
+        # АБО користувач є лише студентом (не викладачем)
+        # АБО вид повернення не визначено, але користувач має обидві ролі
+        else:
+            # За замовчуванням відображаємо студентські курси
+            courses = self.course_service.get_student_courses(username, active_only=True)
+
+            if not courses:
+                await query.edit_message_text("У вас немає активних курсів.")
+                return
+
+            # Створюємо клавіатуру ТІЛЬКИ з курсами, на які студент записаний
+            keyboard = []
+            for course in courses:
+                keyboard.append([InlineKeyboardButton(
+                    course["course_name"],
+                    callback_data=f"studentcourse_{course['course_id']}"
+                )])
+
+            reply_markup = InlineKeyboardMarkup(keyboard)
+
+            await query.edit_message_text(
+                "📚 Ваші поточні курси. Натисніть на курс для детальної інформації:",
+                reply_markup=reply_markup
+            )
     async def view_students(self, update: Update, context: CallbackContext):
         """
         Показує викладачу список його активних курсів у вигляді кнопок.
@@ -293,9 +373,6 @@ class CourseController:
                 message += f"   Telegram: @{student['telegram_tag']}\n"
                 if student['student_phone'] != "Не вказано":
                     message += f"   Телефон: {student['student_phone']}\n"
-                # Додаємо кнопку для видалення цього студента
-                student_id_for_removal = student_id if student_id else i  # Захист від None
-                message += f"   [ID: {student_id_for_removal}]\n"
                 message += "\n"
 
         # Додаємо кнопки для управління списком студентів
