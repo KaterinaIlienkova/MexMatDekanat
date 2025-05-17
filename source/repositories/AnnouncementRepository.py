@@ -13,104 +13,6 @@ logger = logging.getLogger(__name__)
 
 class AnnouncementRepository(BaseRepository):
 
-    def get_all_teachers(self) -> List[Dict[str, Any]]:
-        """Отримати всіх викладачів для розсилки оголошень."""
-        try:
-                teachers = self.session.query(
-                    User.UserID,
-                    User.UserName,
-                    User.TelegramTag,
-                    User.ChatID,
-                    Teacher.TeacherID,
-                    Department.Name.label('DepartmentName')
-                ).join(
-                    Teacher, User.UserID == Teacher.UserID
-                ).join(
-                    Department, Teacher.DepartmentID == Department.DepartmentID, isouter=True
-                ).filter(
-                    User.Role == 'teacher',
-                    User.IsConfirmed == True,
-                    User.ChatID.isnot(None)
-                ).all()
-
-                return [
-                    {
-                        'user_id': t.UserID,
-                        'username': t.UserName,
-                        'telegram_tag': t.TelegramTag,
-                        'chat_id': t.ChatID,
-                        'teacher_id': t.TeacherID,
-                        'department': t.DepartmentName
-                    }
-                    for t in teachers
-                ]
-        except SQLAlchemyError as e:
-            logger.error(f"Database error when getting all teachers: {e}")
-            return []
-
-    def get_teachers_by_department(self, department_id: int) -> List[Dict[str, Any]]:
-        """Отримати викладачів конкретної кафедри для розсилки оголошень."""
-        try:
-                teachers = self.session.query(
-                    User.UserID,
-                    User.UserName,
-                    User.TelegramTag,
-                    User.ChatID,
-                    Teacher.TeacherID
-                ).join(
-                    Teacher, User.UserID == Teacher.UserID
-                ).filter(
-                    User.Role == 'teacher',
-                    User.IsConfirmed == True,
-                    User.ChatID.isnot(None),
-                    Teacher.DepartmentID == department_id
-                ).all()
-
-                return [
-                    {
-                        'user_id': t.UserID,
-                        'username': t.UserName,
-                        'telegram_tag': t.TelegramTag,
-                        'chat_id': t.ChatID,
-                        'teacher_id': t.TeacherID
-                    }
-                    for t in teachers
-                ]
-        except SQLAlchemyError as e:
-            logger.error(f"Database error when getting teachers by department: {e}")
-            return []
-
-    def get_teachers_by_ids(self, teacher_ids: List[int]) -> List[Dict[str, Any]]:
-        """Отримати викладачів за списком ID для розсилки оголошень."""
-        try:
-                teachers = self.session.query(
-                    User.UserID,
-                    User.UserName,
-                    User.TelegramTag,
-                    User.ChatID,
-                    Teacher.TeacherID
-                ).join(
-                    Teacher, User.UserID == Teacher.UserID
-                ).filter(
-                    User.Role == 'teacher',
-                    User.IsConfirmed == True,
-                    User.ChatID.isnot(None),
-                    Teacher.TeacherID.in_(teacher_ids)
-                ).all()
-
-                return [
-                    {
-                        'user_id': t.UserID,
-                        'username': t.UserName,
-                        'telegram_tag': t.TelegramTag,
-                        'chat_id': t.ChatID,
-                        'teacher_id': t.TeacherID
-                    }
-                    for t in teachers
-                ]
-        except SQLAlchemyError as e:
-            logger.error(f"Database error when getting teachers by IDs: {e}")
-            return []
 
     def get_all_departments(self) -> List[Dict[str, Any]]:
         """Отримати список всіх кафедр для вибору розсилки."""
@@ -398,40 +300,7 @@ class AnnouncementRepository(BaseRepository):
             logger.error(f"Database error when getting all students: {e}")
             return []
 
-    def get_all_courses(self) -> List[Dict[str, Any]]:
-        """Отримати список всіх курсів для вибору розсилки."""
-        try:
-                courses = self.session.query(
-                    Course.CourseID,
-                    Course.Name,
-                    User.UserName.label('TeacherName')
-                ).join(
-                    Teacher, Course.TeacherID == Teacher.TeacherID
-                ).join(
-                    User, Teacher.UserID == User.UserID
-                ).filter(
-                    Course.IsActive == True
-                ).all()
 
-                return [
-                    {
-                        'course_id': c.CourseID,
-                        'name': c.Name,
-                        'teacher': c.TeacherName
-                    }
-                    for c in courses
-                ]
-        except SQLAlchemyError as e:
-            logger.error(f"Database error when getting all courses: {e}")
-            return []
-
-    def get_course_by_name(self, course_name: str) -> Optional[Course]:
-        """Отримати курс за назвою."""
-        try:
-                return self.session.query(Course).filter_by(Name=course_name).first()
-        except SQLAlchemyError as e:
-            logger.error(f"Database error when getting course by name: {e}")
-            return None
 
     def get_students_by_course_enrollment(self, course_id: int) -> List[Dict[str, Any]]:
         """Отримати студентів, записаних на конкретний курс, для розсилки оголошень."""
@@ -475,49 +344,7 @@ class AnnouncementRepository(BaseRepository):
             logger.error(f"Database error when getting students by course enrollment: {e}")
             return []
 
-    def get_teacher_courses(self, telegram_tag: str, active_only: bool = True) -> list[dict]:
 
-        try:
-                # Знаходимо викладача за Telegram тегом
-                teacher = self.session.query(Teacher).join(User, User.UserID == Teacher.UserID) \
-                    .filter(User.TelegramTag == telegram_tag).first()
-
-                if not teacher:
-                    return []
-
-                    # Запит для отримання курсів викладача
-                courses_query = self.session.query(
-                    Course.CourseID,
-                    Course.Name.label("course_name"),
-                    Course.StudyPlatform,
-                    Course.MeetingLink,
-                    Course.IsActive
-                ) \
-                    .filter(Course.TeacherID == teacher.TeacherID)
-
-                # Фільтрація тільки активних курсів
-                if active_only:
-                    courses_query = courses_query.filter(Course.IsActive == True)
-
-                courses = courses_query.all()
-
-                # Формування результату
-                courses_list = []
-                for course in courses:
-                    course_dict = {
-                        "course_id": course.CourseID,
-                        "name": course.course_name,
-                        "study_platform": course.StudyPlatform or "Не вказано",
-                        "meeting_link": course.MeetingLink or "Не вказано",
-                        "is_active": course.IsActive
-                    }
-                    courses_list.append(course_dict)
-
-                return courses_list
-
-        except Exception as e:
-            logger.exception(f"Помилка при отриманні курсів викладача: {str(e)}")
-            return []
 
     def get_course_students(self, course_id: int) -> List[Dict[str, Any]]:
         try:

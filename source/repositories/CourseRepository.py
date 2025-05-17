@@ -1,3 +1,5 @@
+from typing import List, Dict, Any
+
 from sqlalchemy.exc import SQLAlchemyError
 from source.config import logger
 from source.models import Course, Teacher, User, CourseEnrollment, Student, StudentGroup, Specialty
@@ -8,68 +10,31 @@ class CourseRepository(BaseRepository):
     """Репозиторій для роботи з курсами в базі даних."""
 
 
-    def get_student_courses(self, telegram_tag: str, active_only: bool = True) -> list[dict]:
-        """
-        Отримує список курсів для студента за його Telegram тегом.
-
-        Args:
-            telegram_tag: Телеграм тег користувача
-            active_only: Якщо True, повертає тільки активні курси (поточний семестр)
-
-        Returns:
-            Список курсів з інформацією про викладача та деталями курсу
-        """
+    def get_all_courses(self) -> List[Dict[str, Any]]:
+        """Отримати список всіх курсів для вибору розсилки."""
         try:
-                # Знаходимо студента за telegram_tag
-                student = self.session.query(Student).join(User, User.UserID == Student.UserID) \
-                    .filter(User.TelegramTag == telegram_tag).first()
+            courses = self.session.query(
+                Course.CourseID,
+                Course.Name,
+                User.UserName.label('TeacherName')
+            ).join(
+                Teacher, Course.TeacherID == Teacher.TeacherID
+            ).join(
+                User, Teacher.UserID == User.UserID
+            ).filter(
+                Course.IsActive == True
+            ).all()
 
-                if not student:
-                    return []
-
-                # Запит для отримання курсів через CourseEnrollment
-                courses_query = self.session.query(
-                    Course.CourseID,
-                    Course.Name.label("course_name"),
-                    Course.StudyPlatform,
-                    Course.MeetingLink,
-                    Course.IsActive,
-                    User.UserName.label("teacher_name"),
-                    Teacher.Email.label("teacher_email"),
-                    User.PhoneNumber.label("teacher_phone")
-                ) \
-                    .join(CourseEnrollment, CourseEnrollment.CourseID == Course.CourseID) \
-                    .filter(CourseEnrollment.StudentID == student.StudentID) \
-                    .join(Teacher, Teacher.TeacherID == Course.TeacherID) \
-                    .join(User, User.UserID == Teacher.UserID)
-
-                # Фільтрація тільки активних курсів
-                if active_only:
-                    courses_query = courses_query.filter(Course.IsActive == True)
-
-                courses = courses_query.all()
-
-                # Формування результату
-                courses_list = []
-                for course in courses:
-                    course_dict = {
-                        "course_id": course.CourseID,
-                        "course_name": course.course_name,
-                        "study_platform": course.StudyPlatform or "Не вказано",
-                        "meeting_link": course.MeetingLink or "Не вказано",
-                        "is_active": course.IsActive,
-                        "teacher": {
-                            "name": course.teacher_name,
-                            "email": course.teacher_email,
-                            "phone": course.teacher_phone or "Не вказано"
-                        }
-                    }
-                    courses_list.append(course_dict)
-
-                return courses_list
-
-        except Exception as e:
-            logger.exception(f"Помилка при отриманні курсів: {str(e)}")
+            return [
+                {
+                    'course_id': c.CourseID,
+                    'name': c.Name,
+                    'teacher': c.TeacherName
+                }
+                for c in courses
+            ]
+        except SQLAlchemyError as e:
+            logger.error(f"Database error when getting all courses: {e}")
             return []
 
     def get_teacher_courses(self, telegram_tag: str, active_only: bool = True) -> list[dict]:
@@ -166,110 +131,6 @@ class CourseRepository(BaseRepository):
             logger.exception(f"Помилка при отриманні студентів на курсі: {str(e)}")
             return []
 
-    def get_teacher_id_by_username(self, username: str) -> int:
-        """
-        Отримує ID викладача за телеграм-тегом.
-
-        Args:
-            username: Телеграм-тег викладача
-
-        Returns:
-            ID викладача або None, якщо викладача не знайдено
-        """
-        try:
-                teacher = self.session.query(Teacher).join(User).filter(User.TelegramTag == username).first()
-                return teacher.TeacherID if teacher else None
-        except SQLAlchemyError as e:
-            logger.exception(f"Помилка при отриманні ID викладача: {e}")
-            return None
-
-    def get_student_id_by_username(self, username: str) -> int:
-        """
-        Отримує ID викладача за телеграм-тегом.
-
-        Args:
-            username: Телеграм-тег викладача
-
-        Returns:
-            ID викладача або None, якщо викладача не знайдено
-        """
-        try:
-                student = self.session.query(Student).join(User).filter(User.TelegramTag == username).first()
-                return student.StudentID if student else None
-        except SQLAlchemyError as e:
-            logger.exception(f"Помилка при отриманні ID викладача: {e}")
-            return None
-
-
-    def get_all_student_groups(self) -> list[dict]:
-        """
-        Отримує список всіх груп студентів.
-
-        Returns:
-            Список груп студентів з їх деталями
-        """
-        try:
-                groups = self.session.query(
-                    StudentGroup.GroupID,
-                    StudentGroup.GroupName,
-                    Specialty.Name.label("specialty_name")
-                ).join(
-                    Specialty,
-                    StudentGroup.SpecialtyID == Specialty.SpecialtyID,
-                    isouter=True
-                ).all()
-
-                groups_list = []
-                for group in groups:
-                    group_dict = {
-                        "group_id": group.GroupID,
-                        "group_name": group.GroupName,
-                        "specialty": group.specialty_name if group.specialty_name else "Не вказано"
-                    }
-                    groups_list.append(group_dict)
-
-                return groups_list
-        except Exception as e:
-            logger.exception(f"Помилка при отриманні груп студентів: {str(e)}")
-            return []
-
-    def get_all_students_by_group(self, group_id: int) -> list[dict]:
-        """
-        Отримує список всіх студентів з вказаної групи незалежно від їх зарахування на курси.
-
-        Args:
-            group_id: ID групи
-
-        Returns:
-            Список студентів з їх деталями
-        """
-        try:
-                # Запит для отримання всіх студентів з вказаної групи
-                students = self.session.query(
-                    Student.StudentID,
-                    User.UserName,
-                    User.TelegramTag,
-                    User.PhoneNumber
-                ).join(
-                    User, Student.UserID == User.UserID
-                ).filter(
-                    Student.GroupID == group_id
-                ).all()
-
-                students_list = []
-                for student in students:
-                    student_dict = {
-                        "student_id": student.StudentID,
-                        "student_name": student.UserName,
-                        "telegram_tag": student.TelegramTag,
-                        "phone_number": student.PhoneNumber or "Не вказано"
-                    }
-                    students_list.append(student_dict)
-
-                return students_list
-        except Exception as e:
-            logger.exception(f"Помилка при отриманні студентів групи: {str(e)}")
-            return []
 
     def add_student_to_course(self, student_id: int, course_id: int) -> bool:
         """
@@ -335,30 +196,6 @@ class CourseRepository(BaseRepository):
         except Exception as e:
             logger.exception(f"Помилка при видаленні студента з курсу: {str(e)}")
             return False
-
-    def get_student_id_by_telegram(self, telegram_tag: str) -> int:
-        """
-        Отримує ID студента за його Telegram тегом.
-
-        Args:
-            telegram_tag: Telegram тег студента
-
-        Returns:
-            ID студента або None, якщо студента не знайдено
-        """
-        try:
-                student = self.session.query(Student).join(
-                    User, Student.UserID == User.UserID
-                ).filter(
-                    User.TelegramTag == telegram_tag
-                ).first()
-
-                return student.StudentID if student else None
-        except Exception as e:
-            logger.exception(f"Помилка при отриманні ID студента: {str(e)}")
-            return None
-
-
 
     def create_course(self, teacher_id: int, name: str, study_platform: str = None, meeting_link: str = None) -> int:
             """

@@ -8,22 +8,24 @@ from source.repositories.BaseRepository import BaseRepository
 class FAQRepository(BaseRepository):
     """Репозиторій для роботи з частими запитаннями в базі даних."""
 
-    def get_faqs(self) -> list[tuple[str, str]]:
-        """Отримує список частих запитань і відповідей з бази даних."""
+    def get_faqs(self, with_id: bool = False) -> list[tuple]:
+        """
+        Отримує список частих запитань і відповідей з бази даних.
+
+        Args:
+            with_id: Якщо True, поверне також ID записів.
+
+        Returns:
+            Список кортежів (питання, відповідь) або (id, питання, відповідь).
+        """
         try:
+            if with_id:
+                faqs = self.session.query(FAQ.FAQID, FAQ.Question, FAQ.Answer).all()
+            else:
                 faqs = self.session.query(FAQ.Question, FAQ.Answer).all()
-                return faqs
+            return faqs
         except SQLAlchemyError as e:
             logger.exception(f"Помилка при отриманні списку FAQ: {e}")
-            return []
-
-    def get_faqs_with_id(self) -> list[tuple[int, str, str]]:
-        """Отримує список частих запитань і відповідей з ID з бази даних."""
-        try:
-                faqs = self.session.query(FAQ.FAQID, FAQ.Question, FAQ.Answer).all()
-                return faqs
-        except SQLAlchemyError as e:
-            logger.exception(f"Помилка при отриманні списку FAQ з ID: {e}")
             return []
 
     def add_faq(self, question: str, answer: str) -> bool:

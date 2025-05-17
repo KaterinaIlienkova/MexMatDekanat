@@ -9,13 +9,14 @@ from source.repositories.FAQRepository import FAQRepository
 
 logger = logging.getLogger(__name__)
 
-# Константи для стану розмови
-WAITING_FOR_QUESTION = 'waiting_for_question'
-WAITING_FOR_ANSWER = 'waiting_for_answer'
-WAITING_FOR_EDIT_ANSWER = 'waiting_for_edit_answer'
+
 
 class FAQController(BaseController):
     """Контролер для роботи з FAQ в телеграм боті."""
+    # Константи для стану розмови
+    WAITING_FOR_QUESTION = 'waiting_for_question'
+    WAITING_FOR_ANSWER = 'waiting_for_answer'
+    WAITING_FOR_EDIT_ANSWER = 'waiting_for_edit_answer'
 
     def __init__(self, application: Application, faq_service: FAQService):
         """
@@ -66,7 +67,7 @@ class FAQController(BaseController):
 
         try:
             # Отримуємо всі FAQ записи з ID
-            faqs = self.faq_service.get_all_faqs_with_id()
+            faqs = self.faq_service.get_faqs(with_id=True)
 
             if not faqs:
                 await query.edit_message_text("Немає доступних питань для редагування.")
@@ -99,7 +100,7 @@ class FAQController(BaseController):
         query = update.callback_query
 
         # Встановлюємо стан розмови
-        context.user_data["state"] = WAITING_FOR_QUESTION
+        context.user_data["state"] = self.WAITING_FOR_QUESTION
 
         await query.edit_message_text("Будь ласка, надішліть текст питання, яке ви хочете додати до FAQ:")
 
@@ -109,7 +110,7 @@ class FAQController(BaseController):
 
         try:
             # Отримуємо всі FAQ записи з ID
-            faqs = self.faq_service.get_all_faqs_with_id()
+            faqs = self.faq_service.get_faqs(with_id=True)
 
             if not faqs:
                 await query.edit_message_text("Немає доступних питань для видалення.")
@@ -184,7 +185,7 @@ class FAQController(BaseController):
             context.user_data["edit_faq_id"] = faq_id
 
             # Отримуємо текст питання та відповідь
-            faqs = self.faq_service.get_all_faqs_with_id()
+            faqs = self.faq_service.get_faqs(with_id=True)
             selected_faq = next((faq for faq in faqs if faq[0] == faq_id), None)
 
             if selected_faq:
@@ -195,7 +196,7 @@ class FAQController(BaseController):
                 context.user_data["edit_question_text"] = question_text
 
                 # Встановлюємо стан розмови
-                context.user_data["state"] = WAITING_FOR_EDIT_ANSWER
+                context.user_data["state"] = self.WAITING_FOR_EDIT_ANSWER
 
                 # Показуємо поточну відповідь та запитуємо нову
                 await query.edit_message_text(
@@ -214,7 +215,7 @@ class FAQController(BaseController):
 
     async def send_qa(self, update: Update, context: CallbackContext):
         """Надсилає список частих запитань студенту."""
-        faqs = self.faq_service.get_all_faqs()
+        faqs = self.faq_service.get_faqs(with_id=False)
 
         if not faqs:
             await update.message.reply_text("Наразі немає доступних запитань.")
@@ -276,14 +277,14 @@ class FAQController(BaseController):
         """Обробляє текстові повідомлення для додавання або редагування FAQ"""
         state = context.user_data.get("state")
 
-        if state == WAITING_FOR_QUESTION:
+        if state == self.WAITING_FOR_QUESTION:
             # Зберігаємо питання і просимо відповідь
             context.user_data["new_question"] = update.message.text
-            context.user_data["state"] = WAITING_FOR_ANSWER
+            context.user_data["state"] = self.WAITING_FOR_ANSWER
             await update.message.reply_text(f"Питання збережено. Тепер надішліть відповідь на це питання:")
             return True
 
-        elif state == WAITING_FOR_ANSWER:
+        elif state == self.WAITING_FOR_ANSWER:
             # Додаємо нове питання та відповідь
             question = context.user_data.get("new_question", "")
             answer = update.message.text
@@ -300,7 +301,7 @@ class FAQController(BaseController):
             context.user_data.pop("new_question", None)
             return True
 
-        elif state == WAITING_FOR_EDIT_ANSWER:
+        elif state == self.WAITING_FOR_EDIT_ANSWER:
             # Оновлюємо відповідь на існуюче питання
             faq_id = context.user_data.get("edit_faq_id")
             new_answer = update.message.text

@@ -23,10 +23,38 @@ class StudentGroupRepository(BaseRepository):
             logger.error(f"Database error when adding student group: {e}")
             return None
 
-    def get_student_groups(self):
-            """Отримує список всіх груп студентів."""
-            groups = self.session.query(StudentGroup).all()
-            return groups
+    def get_all_student_groups(self) -> list[dict]:
+        """
+        Отримує список всіх груп студентів.
+
+        Returns:
+            Список груп студентів з їх деталями
+        """
+        try:
+            groups = self.session.query(
+                StudentGroup.GroupID,
+                StudentGroup.GroupName,
+                Specialty.Name.label("specialty_name")
+            ).join(
+                Specialty,
+                StudentGroup.SpecialtyID == Specialty.SpecialtyID,
+                isouter=True
+            ).all()
+
+            groups_list = []
+            for group in groups:
+                group_dict = {
+                    "group_id": group.GroupID,
+                    "group_name": group.GroupName,
+                    "specialty": group.specialty_name if group.specialty_name else "Не вказано"
+                }
+                groups_list.append(group_dict)
+
+            return groups_list
+        except Exception as e:
+            logger.exception(f"Помилка при отриманні груп студентів: {str(e)}")
+            return []
+
 
     def get_groups_by_admission_year(self, admission_year):
         """Отримує список груп студентів за роком вступу."""

@@ -5,15 +5,18 @@ class FAQService:
     def __init__(self, uow_factory):
         self.uow_factory = uow_factory
 
-    def get_all_faqs(self):
-        with self.uow_factory() as uow:
-            """Отримує всі FAQ."""
-            return uow.faq_repository.get_faqs()
+    def get_faqs(self, with_id: bool = False):
+        """
+        Отримує всі FAQ.
 
-    def get_all_faqs_with_id(self):
-        """Отримує всі FAQ з їх ID."""
+        Args:
+            with_id: Якщо True, поверне також ID записів.
+
+        Returns:
+            Список FAQ у форматі залежно від параметра with_id.
+        """
         with self.uow_factory() as uow:
-            return uow.faq_repository.get_faqs_with_id()
+            return uow.faq_repository.get_faqs(with_id=with_id)
 
     def add_new_faq(self, question: str, answer: str) -> bool:
         with self.uow_factory() as uow:
@@ -37,14 +40,3 @@ class FAQService:
             """Видаляє FAQ."""
             return uow.faq_repository.delete_faq(faq_id)
 
-    def get_faq_details(self, faq_id: int) -> dict or None:
-        with self.uow_factory() as uow:
-            """Отримує деталі FAQ за ID."""
-            result = uow.faq_repository.get_faq_by_id(faq_id)
-            if result:
-                question, answer = result
-                return {
-                    "question": question,
-                    "answer": answer
-                }
-            return None

@@ -18,7 +18,7 @@ class CourseService:
             Список курсів з інформацією про викладачів
         """
         with self.uow_factory() as uow:
-            return uow.course_repository.get_student_courses(telegram_tag, active_only)
+            return uow.student_repository.get_student_courses(telegram_tag, active_only)
 
     def get_teacher_courses(self, telegram_tag: str, active_only: bool = True) -> list[dict]:
         """
@@ -58,7 +58,7 @@ class CourseService:
             True якщо користувач є викладачем, інакше False
         """
         with self.uow_factory() as uow:
-            return uow.course_repository.get_teacher_id_by_username(telegram_tag) is not None
+            return uow.teacher_repository.get_teacher_id_by_username(telegram_tag) is not None
 
     def is_student(self, telegram_tag: str) -> bool:
         """
@@ -71,7 +71,7 @@ class CourseService:
             True якщо користувач є викладачем, інакше False
         """
         with self.uow_factory() as uow:
-            return uow.course_repository.get_student_id_by_username(telegram_tag) is not None
+            return uow.student_repository.get_student_id_by_username(telegram_tag) is not None
 
 
     def get_all_student_groups(self) -> list[dict]:
@@ -82,7 +82,7 @@ class CourseService:
             Список груп студентів з їх деталями
         """
         with self.uow_factory() as uow:
-            return uow.course_repository.get_all_student_groups()
+            return uow.student_repository.get_all_student_groups()
 
     def get_available_students_for_course(self, group_id: int, course_id: int) -> list[dict]:
         """
@@ -137,7 +137,7 @@ class CourseService:
             ID студента або None, якщо студента не знайдено
         """
         with self.uow_factory() as uow:
-            return uow.course_repository.get_student_id_by_telegram(telegram_tag)
+            return uow.student_repository.get_student_id_by_telegram(telegram_tag)
 
     def get_all_students_by_group(self, group_id: int) -> List[Dict[str, Any]]:
         """
@@ -150,7 +150,7 @@ class CourseService:
             Список студентів групи з їх деталями
         """
         with self.uow_factory() as uow:
-            return uow.course_repository.get_all_students_by_group(group_id)  # ПРАВИЛЬНА НАЗВА МЕТОДУ
+            return uow.student_repository.get_all_students_by_group(group_id)  # ПРАВИЛЬНА НАЗВА МЕТОДУ
 
 
 
@@ -168,7 +168,7 @@ class CourseService:
             True якщо курс створено успішно, інакше False
         """
         with self.uow_factory() as uow:
-            teacher_id = uow.course_repository.get_teacher_id_by_username(telegram_tag)
+            teacher_id = uow.teacher_repository.get_teacher_id_by_username(telegram_tag)
             if not teacher_id:
                 return False
 
