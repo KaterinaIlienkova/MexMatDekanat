@@ -93,7 +93,7 @@ class AnnouncementService:
     async def send_to_all_students(self, message: str, bot, media_type=None, media_content=None) -> Tuple[int, int]:
         """Надіслати оголошення всім студентам."""
         with self.uow_factory() as uow:
-            students = uow.announcement_repository.get_all_students()
+            students = uow.student_repository.get_all_students()
             chat_ids = [student['chat_id'] for student in students if student['chat_id']]
 
             return await self.send_announcement_to_recipients(message, chat_ids, bot, media_type=media_type, media_content=media_content)
@@ -101,7 +101,7 @@ class AnnouncementService:
     async def send_to_group_students(self, group_id: int, message: str, bot, media_type=None, media_content=None) -> Tuple[int, int]:
         """Надіслати оголошення студентам конкретної групи."""
         with self.uow_factory() as uow:
-            students = uow.announcement_repository.get_students_by_group(group_id)
+            students = uow.student_repository.get_students_by_group_to_announce(group_id)
             chat_ids = [student['chat_id'] for student in students if student['chat_id']]
 
             return await uow.send_announcement_to_recipients(message, chat_ids, bot, media_type=media_type, media_content=media_content)
@@ -109,7 +109,7 @@ class AnnouncementService:
     async def send_to_specialty_students(self, specialty_id: int, message: str, bot, media_type=None, media_content=None) -> Tuple[int, int]:
         """Надіслати оголошення студентам конкретної спеціальності."""
         with self.uow_factory() as uow:
-            students = uow.announcement_repository.get_students_by_specialty(specialty_id)
+            students = uow.student_repository.get_students_by_specialty(specialty_id)
             chat_ids = [student['chat_id'] for student in students if student['chat_id']]
 
             return await self.send_announcement_to_recipients(message, chat_ids, bot, media_type=media_type, media_content=media_content)
@@ -117,7 +117,7 @@ class AnnouncementService:
     async def send_to_course_year_students(self, course_year: int, message: str, bot, media_type=None, media_content=None) -> Tuple[int, int]:
         """Надіслати оголошення студентам конкретного курсу навчання."""
         with self.uow_factory() as uow:
-            students = uow.announcement_repository.get_students_by_course_year(course_year)
+            students = uow.student_repository.get_students_by_course_year(course_year)
             chat_ids = [student['chat_id'] for student in students if student['chat_id']]
 
             return await self.send_announcement_to_recipients(message, chat_ids, bot, media_type=media_type, media_content=media_content)
@@ -125,7 +125,7 @@ class AnnouncementService:
     async def send_to_course_enrollment_students(self, course_id: int, message: str, bot, media_type=None, media_content=None) -> Tuple[int, int]:
         """Надіслати оголошення студентам, які записані на конкретний курс."""
         with self.uow_factory() as uow:
-            students = uow.announcement_repository.get_students_by_course_enrollment(course_id)
+            students = uow.student_repository.get_students_by_course_enrollment(course_id)
             chat_ids = [student['chat_id'] for student in students if student['chat_id']]
 
             return await self.send_announcement_to_recipients(message, chat_ids, bot, media_type=media_type, media_content=media_content)
@@ -133,7 +133,7 @@ class AnnouncementService:
     async def send_to_specific_students(self, student_ids: List[int], message: str, bot, media_type=None, media_content=None) -> Tuple[int, int]:
         """Надіслати оголошення конкретним студентам за їх ID."""
         with self.uow_factory() as uow:
-            students = uow.announcement_repository.get_students_by_ids(student_ids)
+            students = uow.student_repository.get_students_by_ids(student_ids)
             chat_ids = [student['chat_id'] for student in students if student['chat_id']]
 
             return await self.send_announcement_to_recipients(message, chat_ids, bot, media_type=media_type, media_content=media_content)
@@ -156,15 +156,15 @@ class AnnouncementService:
             all_students = {}
             for course in teacher_courses:
                 course_id = course['course_id']
-                students = uow.announcement_repository.get_course_students(course_id)
+                students = uow.course_repository.get_all_course_students(course_id)
 
                 for student in students:
                     if 'student_id' in student and student['student_id']:
                         student_id = student['student_id']
                         all_students[student_id] = {
-                            'student_id': student_id,
-                            'name': student.get('student_name', 'Без імені'),
-                            'group': student.get('group_name', 'Невідома група')
+                                'student_id': student_id,
+                                'student_name': student.get('student_name', 'Без імені'),
+                                'group_name': student.get('group_name', 'Невідома група')
                         }
 
             # Повертаємо список словників
@@ -194,20 +194,16 @@ class AnnouncementService:
             return courses_list
     # Допоміжні методи для отримання списків для вибору
 
-    def get_departments_list(self) -> List[Dict[str, Any]]:
-        """Отримати список кафедр для вибору розсилки."""
-        with self.uow_factory() as uow:
-            return uow.announcement_repository.get_all_departments()
 
     def get_student_groups_list(self) -> List[Dict[str, Any]]:
         """Отримати список студентських груп для вибору розсилки."""
         with self.uow_factory() as uow:
-            return uow.announcement_repository.get_all_student_groups()
+            return uow.studentGroup_repository_repository.get_all_student_groups()
 
     def get_specialties_list(self) -> List[Dict[str, Any]]:
         """Отримати список спеціальностей для вибору розсилки."""
         with self.uow_factory() as uow:
-            return uow.announcement_repository.get_all_specialties()
+            return uow.specialty_repository.get_all_specialties()
 
     def get_courses_list(self) -> List[Dict[str, Any]]:
         """Отримати список курсів для вибору розсилки."""
@@ -223,7 +219,7 @@ class AnnouncementService:
     def get_students_list(self) -> List[Dict[str, Any]]:
         """Отримати список всіх студентів для індивідуального вибору."""
         with self.uow_factory() as uow:
-            students = uow.announcement_repository.get_all_students()
+            students = uow.student_repository.get_all_students()
             return [{'student_id': s['student_id'], 'name': s['username'], 'group': s['group_name']} for s in students]
 
     def get_course_years_list(self) -> List[Dict[str, int]]:
@@ -253,15 +249,15 @@ class AnnouncementService:
             elif recipient_type == 'specific_teachers' and ids_list:
                 return len(uow.teacher_repository.get_teachers_by_ids(ids_list))
             elif recipient_type == 'all_students':
-                return len(uow.announcement_repository.get_all_students())
+                return len(uow.student_repository.get_all_students())
             elif recipient_type == 'group_students' and target_id:
-                return len(uow.announcement_repository.get_students_by_group(target_id))
+                return len(uow.student_repository.get_students_by_group_to_announce(target_id))
             elif recipient_type == 'specialty_students' and target_id:
-                return len(uow.announcement_repository.get_students_by_specialty(target_id))
+                return len(uow.student_repository.get_students_by_specialty(target_id))
             elif recipient_type == 'course_year_students' and target_id:
-                return len(uow.announcement_repository.get_students_by_course_year(target_id))
+                return len(uow.student_repository.get_students_by_course_year(target_id))
             elif recipient_type == 'course_enrollment_students' and target_id:
-                return len(uow.announcement_repository.get_students_by_course_enrollment(target_id))
+                return len(uow.student_repository.get_students_by_course_enrollment(target_id))
             elif recipient_type == 'specific_students' and ids_list:
-                return len(uow.announcement_repository.get_students_by_ids(ids_list))
+                return len(uow.student_repository.get_students_by_ids(ids_list))
             return 0

@@ -4,7 +4,8 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from source.config import logger
 from source.models import User, StudentGroup, Student, Department, Teacher, Specialty, DocumentRequest, CourseEnrollment
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
+
 
 class StudentGroupRepository(BaseRepository):
 
@@ -23,36 +24,27 @@ class StudentGroupRepository(BaseRepository):
             logger.error(f"Database error when adding student group: {e}")
             return None
 
-    def get_all_student_groups(self) -> list[dict]:
-        """
-        Отримує список всіх груп студентів.
-
-        Returns:
-            Список груп студентів з їх деталями
-        """
+    def get_all_student_groups(self) -> List[Dict[str, Any]]:
+        """Отримати список всіх груп студентів для вибору розсилки."""
         try:
             groups = self.session.query(
                 StudentGroup.GroupID,
                 StudentGroup.GroupName,
-                Specialty.Name.label("specialty_name")
+                Specialty.Name.label('SpecialtyName')
             ).join(
-                Specialty,
-                StudentGroup.SpecialtyID == Specialty.SpecialtyID,
-                isouter=True
+                Specialty, StudentGroup.SpecialtyID == Specialty.SpecialtyID, isouter=True
             ).all()
 
-            groups_list = []
-            for group in groups:
-                group_dict = {
-                    "group_id": group.GroupID,
-                    "group_name": group.GroupName,
-                    "specialty": group.specialty_name if group.specialty_name else "Не вказано"
+            return [
+                {
+                    'group_id': g.GroupID,
+                    'group_name': g.GroupName,
+                    'specialty': g.SpecialtyName
                 }
-                groups_list.append(group_dict)
-
-            return groups_list
-        except Exception as e:
-            logger.exception(f"Помилка при отриманні груп студентів: {str(e)}")
+                for g in groups
+            ]
+        except SQLAlchemyError as e:
+            logger.error(f"Database error when getting all student groups: {e}")
             return []
 
 
@@ -72,4 +64,5 @@ class StudentGroupRepository(BaseRepository):
         except SQLAlchemyError as e:
             logger.error(f"Database error when getting student group by name: {e}")
             return None
+
 

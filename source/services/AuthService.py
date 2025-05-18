@@ -300,10 +300,10 @@ class AuthService:
         with self.uow_factory() as uow:
             return uow.studentGroup_repository.get_groups_by_admission_year(admission_year)
 
-    async def get_departments(self):
+    def get_all_departments(self) -> List[Dict[str, Any]]:
         """Отримує список всіх кафедр."""
         with self.uow_factory() as uow:
-            return uow.department_repository.get_departments()
+            return uow.department_repository.get_all_departments()
 
     async def get_teachers_by_department(self, department_name):
         """Отримує список викладачів із конкретної кафедри."""

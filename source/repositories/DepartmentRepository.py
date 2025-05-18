@@ -4,14 +4,32 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from source.config import logger
 from source.models import User, StudentGroup, Student, Department, Teacher, Specialty, DocumentRequest, CourseEnrollment
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
+
 
 class DepartmentRepository(BaseRepository):
 
-    def get_departments(self):
-        """Отримує список всіх кафедр."""
-        departments = self.session.query(Department.Name).all()
-        return [dept[0] for dept in departments]
+
+    def get_all_departments(self) -> List[Dict[str, Any]]:
+        """Отримати список всіх кафедр для вибору розсилки."""
+        try:
+            departments = self.session.query(
+                Department.DepartmentID,
+                Department.Name
+            ).all()
+
+            return [
+                {
+                    'department_id': d.DepartmentID,
+                    'name': d.Name
+                }
+                for d in departments
+            ]
+        except SQLAlchemyError as e:
+            logger.error(f"Database error when getting all departments: {e}")
+            return []
+
+
     def get_department_by_name(self, department_name: str) -> Optional[Department]:
         """Отримує департамент за назвою."""
         try:

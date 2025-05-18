@@ -1,5 +1,4 @@
 
-from source.repositories.AnnouncementRepository import AnnouncementRepository
 from source.repositories.AuthRepository import AuthRepository
 from source.repositories.CourseRepository import CourseRepository
 from source.repositories.DepartmentRepository import DepartmentRepository
@@ -23,7 +22,6 @@ class UnitOfWork:
         self.document_type_repository = None
         self.document_request_repository = None
         self.course_repository = None
-        self.announcement_repository = None
         self.auth_repository = None
         self.faq_repository = None
         self.pqa_repository = None
@@ -42,7 +40,6 @@ class UnitOfWork:
         self.document_type_repository = DocumentTypeRepository(self._session)
         self.document_request_repository = DocumentRequestRepository(self._session)
         self.course_repository = CourseRepository(self._session)
-        self.announcement_repository = AnnouncementRepository(self._session)
         self.auth_repository = AuthRepository(self._session)
         self.faq_repository= FAQRepository(self._session)
         self.pqa_repository= PersonalQARepository(self._session)

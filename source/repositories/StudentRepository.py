@@ -1,14 +1,52 @@
 from source.repositories.BaseRepository import BaseRepository
 
 from sqlalchemy.exc import SQLAlchemyError
-
+from datetime import datetime
 from source.config import logger
 from source.models import User, StudentGroup, Student, Department, Teacher, Specialty, DocumentRequest, \
     CourseEnrollment, Course
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
+
 
 class StudentRepository(BaseRepository):
 
+
+    def get_all_students(self) -> List[Dict[str, Any]]:
+        """Отримати всіх студентів для розсилки оголошень."""
+        try:
+            students = self.session.query(
+                User.UserID,
+                User.UserName,
+                User.TelegramTag,
+                User.ChatID,
+                Student.StudentID,
+                Student.AdmissionYear,
+                StudentGroup.GroupName
+            ).join(
+                Student, User.UserID == Student.UserID
+            ).join(
+                StudentGroup, Student.GroupID == StudentGroup.GroupID
+            ).filter(
+                User.Role == 'student',
+                User.IsConfirmed == True,
+                User.ChatID.isnot(None)
+            ).all()
+
+            return [
+                {
+                    'user_id': s.UserID,
+                    'username': s.UserName,
+                    'telegram_tag': s.TelegramTag,
+                    'chat_id': s.ChatID,
+                    'student_id': s.StudentID,
+                    'group_name': s.GroupName,
+                    'admission_year': s.AdmissionYear
+                }
+                for s in students
+            ]
+        except SQLAlchemyError as e:
+            logger.error(f"Database error when getting all students: {e}")
+            return []
 
     def get_student_by_user_id(self, user_id: int) -> Optional[Student]:
         """Отримує запис студента за ID користувача."""
@@ -17,8 +55,6 @@ class StudentRepository(BaseRepository):
         except SQLAlchemyError as e:
             logger.exception(f"Помилка при отриманні студента: {e}")
             return None
-
-
 
     def add_student(self, user_id: int, group_id: int, admission_year: int) -> Optional[Student]:
         """Додає запис студента для існуючого користувача."""
@@ -123,13 +159,10 @@ class StudentRepository(BaseRepository):
                 logger.error(f"Error updating student info: {e}")
                 return False
 
-
     def get_admission_years(self):
         """Отримує список унікальних років вступу студентів."""
         years = self.session.query(Student.AdmissionYear).distinct().all()
         return [year[0] for year in years]
-
-
 
     def get_students_by_group_and_course(self, group_name, admission_year):
             """Отримує список студентів із конкретної групи та року вступу."""
@@ -187,19 +220,18 @@ class StudentRepository(BaseRepository):
             logger.exception(f"Помилка при отриманні ID студента: {str(e)}")
             return None
 
-
-    def get_all_students_by_group(self, group_id: int) -> list[dict]:
+    def get_all_students_by_group(self, group_id: int) -> List[Dict[str, Any]]:
         """
-        Отримує список всіх студентів з вказаної групи незалежно від їх зарахування на курси.
+        Отримує список всіх підтверджених студентів з вказаної групи незалежно від їх зарахування на курси.
 
         Args:
             group_id: ID групи
 
         Returns:
-            Список студентів з їх деталями
+            Список підтверджених студентів з їх деталями
         """
         try:
-            # Запит для отримання всіх студентів з вказаної групи
+            # Запит для отримання всіх підтверджених студентів з вказаної групи
             students = self.session.query(
                 Student.StudentID,
                 User.UserName,
@@ -208,7 +240,8 @@ class StudentRepository(BaseRepository):
             ).join(
                 User, Student.UserID == User.UserID
             ).filter(
-                Student.GroupID == group_id
+                Student.GroupID == group_id,
+                User.IsConfirmed == True  # Додана перевірка на підтвердження
             ).all()
 
             students_list = []
@@ -222,8 +255,8 @@ class StudentRepository(BaseRepository):
                 students_list.append(student_dict)
 
             return students_list
-        except Exception as e:
-            logger.exception(f"Помилка при отриманні студентів групи: {str(e)}")
+        except SQLAlchemyError as e:  # Змінено на більш специфічний тип помилки
+            logger.error(f"Database error when getting confirmed students by group: {e}")
             return []
 
     def get_student_courses(self, telegram_tag: str, active_only: bool = True) -> list[dict]:
@@ -288,4 +321,210 @@ class StudentRepository(BaseRepository):
 
         except Exception as e:
             logger.exception(f"Помилка при отриманні курсів: {str(e)}")
+            return []
+
+    def get_students_by_specialty(self, specialty_id: int) -> List[Dict[str, Any]]:
+        """Отримати студентів конкретної спеціальності для розсилки оголошень."""
+        try:
+            students = self.session.query(
+                User.UserID,
+                User.UserName,
+                User.TelegramTag,
+                User.ChatID,
+                Student.StudentID,
+                StudentGroup.GroupName
+            ).join(
+                Student, User.UserID == Student.UserID
+            ).join(
+                StudentGroup, Student.GroupID == StudentGroup.GroupID
+            ).filter(
+                User.Role == 'student',
+                User.IsConfirmed == True,
+                User.ChatID.isnot(None),
+                StudentGroup.SpecialtyID == specialty_id
+            ).all()
+
+            return [
+                {
+                    'user_id': s.UserID,
+                    'username': s.UserName,
+                    'telegram_tag': s.TelegramTag,
+                    'chat_id': s.ChatID,
+                    'student_id': s.StudentID,
+                    'group_name': s.GroupName
+                }
+                for s in students
+            ]
+        except SQLAlchemyError as e:
+            logger.error(f"Database error when getting students by specialty: {e}")
+            return []
+
+    def get_students_by_course_year(self, course_year: int) -> List[Dict[str, Any]]:
+        """
+        Отримати студентів конкретного курсу навчання для розсилки оголошень.
+        Курс визначається як поточний рік мінус рік вступу.
+        """
+        try:
+            current_year = datetime.now().year
+            current_month = datetime.now().month
+
+            # Якщо поточний місяць менший за вересень (9), то курс рахується за попереднім роком
+            if current_month < 9:
+                academic_year_start = current_year - 1
+            else:
+                academic_year_start = current_year
+
+            # Визначаємо рік вступу для потрібного курсу
+            admission_year = academic_year_start - course_year + 1
+
+            students = self.session.query(
+                User.UserID,
+                User.UserName,
+                User.TelegramTag,
+                User.ChatID,
+                Student.StudentID,
+                Student.AdmissionYear,
+                StudentGroup.GroupName
+            ).join(
+                Student, User.UserID == Student.UserID
+            ).join(
+                StudentGroup, Student.GroupID == StudentGroup.GroupID
+            ).filter(
+                User.Role == 'student',
+                User.IsConfirmed == True,
+                User.ChatID.isnot(None),
+                Student.AdmissionYear == admission_year
+            ).all()
+
+            return [
+                {
+                    'user_id': s.UserID,
+                    'username': s.UserName,
+                    'telegram_tag': s.TelegramTag,
+                    'chat_id': s.ChatID,
+                    'student_id': s.StudentID,
+                    'group_name': s.GroupName,
+                    'admission_year': s.AdmissionYear
+                }
+                for s in students
+            ]
+        except SQLAlchemyError as e:
+            logger.error(f"Database error when getting students by course year: {e}")
+            return []
+        except Exception as e:
+            logger.error(f"Error calculating course year: {e}")
+            return []
+
+    def get_students_by_ids(self, student_ids: List[int]) -> List[Dict[str, Any]]:
+        """Отримати студентів за списком ID для розсилки оголошень."""
+        try:
+            students = self.session.query(
+                User.UserID,
+                User.UserName,
+                User.TelegramTag,
+                User.ChatID,
+                Student.StudentID,
+                StudentGroup.GroupName
+            ).join(
+                Student, User.UserID == Student.UserID
+            ).join(
+                StudentGroup, Student.GroupID == StudentGroup.GroupID
+            ).filter(
+                User.Role == 'student',
+                User.IsConfirmed == True,
+                User.ChatID.isnot(None),
+                Student.StudentID.in_(student_ids)
+            ).all()
+
+            return [
+                {
+                    'user_id': s.UserID,
+                    'username': s.UserName,
+                    'telegram_tag': s.TelegramTag,
+                    'chat_id': s.ChatID,
+                    'student_id': s.StudentID,
+                    'group_name': s.GroupName
+                }
+                for s in students
+            ]
+        except SQLAlchemyError as e:
+            logger.error(f"Database error when getting students by IDs: {e}")
+            return []
+
+    def get_students_by_course_enrollment(self, course_id: int) -> List[Dict[str, Any]]:
+        """Отримати студентів, записаних на конкретний курс, для розсилки оголошень."""
+        try:
+            students = self.session.query(
+                User.UserID,
+                User.UserName,
+                User.TelegramTag,
+                User.ChatID,
+                Student.StudentID,
+                StudentGroup.GroupName,
+                Course.Name.label('CourseName')
+            ).join(
+                Student, User.UserID == Student.UserID
+            ).join(
+                CourseEnrollment, Student.StudentID == CourseEnrollment.StudentID
+            ).join(
+                Course, CourseEnrollment.CourseID == Course.CourseID
+            ).join(
+                StudentGroup, Student.GroupID == StudentGroup.GroupID
+            ).filter(
+                User.Role == 'student',
+                User.IsConfirmed == True,
+                User.ChatID.isnot(None),
+                CourseEnrollment.CourseID == course_id
+            ).all()
+
+            return [
+                {
+                    'user_id': s.UserID,
+                    'username': s.UserName,
+                    'telegram_tag': s.TelegramTag,
+                    'chat_id': s.ChatID,
+                    'student_id': s.StudentID,
+                    'group_name': s.GroupName,
+                    'course_name': s.CourseName
+                }
+                for s in students
+            ]
+        except SQLAlchemyError as e:
+            logger.error(f"Database error when getting students by course enrollment: {e}")
+            return []
+
+        def get_students_by_group_to_announce(self, group_id: int) -> List[Dict[str, Any]]:
+            """Отримати студентів конкретної групи для розсилки оголошень."""
+        try:
+            students = self.session.query(
+                User.UserID,
+                User.UserName,
+                User.TelegramTag,
+                User.ChatID,
+                Student.StudentID,
+                StudentGroup.GroupName
+            ).join(
+                Student, User.UserID == Student.UserID
+            ).join(
+                StudentGroup, Student.GroupID == StudentGroup.GroupID
+            ).filter(
+                User.Role == 'student',
+                User.IsConfirmed == True,
+                User.ChatID.isnot(None),
+                Student.GroupID == group_id
+            ).all()
+
+            return [
+                {
+                    'user_id': s.UserID,
+                    'username': s.UserName,
+                    'telegram_tag': s.TelegramTag,
+                    'chat_id': s.ChatID,
+                    'student_id': s.StudentID,
+                    'group_name': s.GroupName
+                }
+                for s in students
+            ]
+        except SQLAlchemyError as e:
+            logger.error(f"Database error when getting students by group: {e}")
             return []

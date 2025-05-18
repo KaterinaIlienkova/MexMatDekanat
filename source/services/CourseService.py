@@ -34,18 +34,9 @@ class CourseService:
         with self.uow_factory() as uow:
             return uow.course_repository.get_teacher_courses(telegram_tag, active_only)
 
-    def get_course_students(self, course_id: int) -> list[dict]:
-        """
-        Отримує список студентів на курсі.
-
-        Args:
-            course_id: ID курсу
-
-        Returns:
-            Список студентів на курсі
-        """
+    def get_course_students(self, course_id: int) -> List[Dict[str, Any]]:
         with self.uow_factory() as uow:
-            return uow.course_repository.get_course_students(course_id)
+            return uow.course_repository.get_all_course_students(course_id)
 
     def is_teacher(self, telegram_tag: str) -> bool:
         """
@@ -74,7 +65,7 @@ class CourseService:
             return uow.student_repository.get_student_id_by_username(telegram_tag) is not None
 
 
-    def get_all_student_groups(self) -> list[dict]:
+    def get_all_student_groups(self) -> List[Dict[str, Any]]:
         """
         Отримує список всіх груп студентів.
 
@@ -82,7 +73,7 @@ class CourseService:
             Список груп студентів з їх деталями
         """
         with self.uow_factory() as uow:
-            return uow.student_repository.get_all_student_groups()
+            return uow.studentGroup_repository_repository.get_all_student_groups()
 
     def get_available_students_for_course(self, group_id: int, course_id: int) -> list[dict]:
         """

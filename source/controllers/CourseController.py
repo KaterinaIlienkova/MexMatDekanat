@@ -368,7 +368,7 @@ class CourseController(BaseController):
             message = f"📚 <b>Студенти курсу: {course['course_name']}</b>\n\n"
             for i, student in enumerate(students, 1):
                 # Додаємо ID студента в дужках для ідентифікації при видаленні
-                student_id = self.course_service.get_student_id_by_telegram(student['telegram_tag'])
+                student_id = student['student_id']
                 message += f"{i}. <b>{student['student_name']}</b>\n"
                 message += f"   Telegram: @{student['telegram_tag']}\n"
                 if student['student_phone'] != "Не вказано":

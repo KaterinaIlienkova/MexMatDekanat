@@ -24,11 +24,12 @@ class AnnouncementController(BaseController):
     WAITING_FOR_ANNOUNCEMENT_TEXT = 4
     WAITING_FOR_ANNOUNCEMENT_CONFIRMATION = 5
 
-    def __init__(self, application, announcement_service,auth_controller):
+    def __init__(self, application, announcement_service,auth_controller,auth_service):
         super().__init__(application)
         self.application = application
         self.announcement_service = announcement_service
         self.auth_controller =auth_controller
+        self.auth_service = auth_service
 
 
 
@@ -200,7 +201,7 @@ class AnnouncementController(BaseController):
 
         elif recipient_type == "department_teachers":
             # Отримуємо список кафедр
-            departments = self.announcement_service.get_departments_list()
+            departments = self.auth_service.get_departments_list()
             keyboard = [
                 [InlineKeyboardButton(dept['name'], callback_data=f"target_{dept['department_id']}")]
                 for dept in departments
@@ -350,7 +351,7 @@ class AnnouncementController(BaseController):
     def _get_target_name(self, recipient_type: str, target_id: int) -> str:
         """Отримує назву цільової групи за типом і ID."""
         if recipient_type == "department_teachers":
-            departments = self.announcement_service.get_departments_list()
+            departments = self.auth_service.get_departments_list()
             for dept in departments:
                 if dept['department_id'] == target_id:
                     return dept['name']

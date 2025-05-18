@@ -90,46 +90,47 @@ class CourseRepository(BaseRepository):
             logger.exception(f"Помилка при отриманні курсів викладача: {str(e)}")
             return []
 
-    def get_course_students(self, course_id: int) -> list[dict]:
+    from typing import List, Dict, Any
+
+    def get_all_course_students(self, course_id: int) -> List[Dict[str, Any]]:
         """
-        Отримує список студентів на конкретному курсі за його ID.
+        Отримує повну інформацію про студентів, які записані на курс.
 
         Args:
             course_id: ID курсу
 
         Returns:
-            Список студентів з їх деталями
+            Список словників з деталями студентів
         """
         try:
-                # Запит для отримання студентів на курсі
-                students_query = self.session.query(
-                    User.UserName.label("student_name"),
-                    User.PhoneNumber.label("student_phone"),
-                    User.TelegramTag.label("telegram_tag")
-                ).join(
-                    Student, Student.UserID == User.UserID
-                ).join(
-                    CourseEnrollment, CourseEnrollment.StudentID == Student.StudentID
-                ).filter(
-                    CourseEnrollment.CourseID == course_id
-                )
+            students = self.session.query(
+                Student.StudentID.label("student_id"),
+                User.UserName.label("student_name"),
+                User.PhoneNumber.label("student_phone"),
+                User.TelegramTag.label("telegram_tag"),
+                StudentGroup.GroupName.label("group_name")
+            ).join(User, User.UserID == Student.UserID) \
+                .join(StudentGroup, StudentGroup.GroupID == Student.GroupID) \
+                .join(CourseEnrollment, CourseEnrollment.StudentID == Student.StudentID) \
+                .filter(CourseEnrollment.CourseID == course_id) \
+                .all()
 
-                students = students_query.all()
-
-                students_list = []
-                for student in students:
-                    student_dict = {
-                        "student_name": student.student_name,
-                        "student_phone": student.student_phone or "Не вказано",
-                        "telegram_tag": student.telegram_tag
-                    }
-                    students_list.append(student_dict)
-
-                return students_list
+            return [
+                {
+                    "student_id": student.student_id,
+                    "student_name": student.student_name,
+                    "student_phone": student.student_phone or "Не вказано",
+                    "telegram_tag": student.telegram_tag,
+                    "group_name": student.group_name
+                }
+                for student in students
+            ]
 
         except Exception as e:
-            logger.exception(f"Помилка при отриманні студентів на курсі: {str(e)}")
+            logger.exception(f"Помилка при отриманні студентів курсу: {str(e)}")
             return []
+
+
 
 
     def add_student_to_course(self, student_id: int, course_id: int) -> bool:

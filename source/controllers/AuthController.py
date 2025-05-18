@@ -133,7 +133,7 @@ class AuthController(BaseController):
         return self.WAITING_FOR_DELETE_ROLE
 
     async def process_delete_role(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-            #Обробляє вибір ролі для видалення.
+        """Обробляє вибір ролі для видалення."""
         query = update.callback_query
         await query.answer()
 
@@ -157,17 +157,23 @@ class AuthController(BaseController):
             return self.WAITING_FOR_DELETE_COURSE
 
         elif role == "teacher":
-            # Отримати список кафедр для викладачів
-            departments = await self.auth_service.get_departments()
+            # Отримати список кафедр для викладачів (синхронний виклик в async контексті)
+            import asyncio
+            loop = asyncio.get_event_loop()
+            departments = await loop.run_in_executor(
+                None,
+                self.auth_service.get_all_departments
+            )
 
             keyboard = []
-            for i, department in enumerate(departments):
-                # Використовуємо індекс замість повної назви
-                keyboard.append([InlineKeyboardButton(department, callback_data=f"delete_dept_{i}")])
-                # Зберігаємо відповідність між індексом та назвою кафедри
-                if 'department_map' not in context.user_data:
-                    context.user_data['department_map'] = {}
-                context.user_data['department_map'][str(i)] = department
+            for department in departments:
+                # Використовуємо department_id замість індексу
+                keyboard.append([
+                    InlineKeyboardButton(
+                        department['name'],
+                        callback_data=f"delete_dept_{department['department_id']}"
+                    )
+                ])
 
             reply_markup = InlineKeyboardMarkup(keyboard)
             await query.edit_message_text(
@@ -445,7 +451,7 @@ class AuthController(BaseController):
         context.user_data["group_name"] = group_name
 
         # Перевіряємо чи група існує
-        group = self.auth_service.auth_repository.get_student_group_by_name(group_name)
+        group = self.auth_service.studentGroup_repository.get_student_group_by_name(group_name)
 
         if group:
             # Група існує, переходимо до року вступу
