@@ -2,7 +2,6 @@ from typing import List, Dict, Any, Optional, Union, Tuple
 import logging
 from datetime import datetime
 
-from source.repositories import AnnouncementRepository, CourseRepository
 
 logger = logging.getLogger(__name__)
 

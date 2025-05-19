@@ -44,7 +44,7 @@ def main():
     faq_controller = FAQController(application, faq_service)
     course_controller = CourseController(application, course_service)
     auth_controller = AuthController(application, auth_service)
-    announcement_controller = AnnouncementController(application, announcement_service, auth_controller)
+    announcement_controller = AnnouncementController(application, announcement_service, auth_controller, auth_service)
     pqa_controller = PersonalQAController(application, pqa_service, auth_service)
 
 

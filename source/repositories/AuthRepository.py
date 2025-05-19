@@ -200,55 +200,55 @@ class AuthRepository(BaseRepository):
     #         return None
     #
 
-    def update_user_field(self, telegram_tag, field, new_value):
-            """Оновлює вказане поле користувача."""
-            try:
-                user = self.session.query(User).filter_by(TelegramTag=telegram_tag).first()
-                if not user:
-                    return False, "Користувача не знайдено"
-
-                if field == "name":
-                    user.UserName = new_value
-                elif field == "phone":
-                    user.PhoneNumber = new_value
-                elif field == "year":
-                    student = self.session.query(Student).filter_by(UserID=user.UserID).first()
-                    if student:
-                        try:
-                            year = int(new_value)
-                            student.AdmissionYear = year
-                        except ValueError:
-                            return False, "Рік вступу повинен бути числом"
-                    else:
-                        return False, "Цей користувач не є студентом"
-                elif field == "group":
-                    student = self.session.query(Student).filter_by(UserID=user.UserID).first()
-                    if student:
-                        # Спочатку перевіряємо, чи існує група з таким ім'ям
-                        group = self.session.query(StudentGroup).filter_by(GroupName=new_value).first()
-                        if group:
-                            student.GroupID = group.GroupID
-                        else:
-                            # Якщо введено ID групи замість назви
-                            try:
-                                group_id = int(new_value)
-                                group = self.session.query(StudentGroup).filter_by(GroupID=group_id).first()
-                                if group:
-                                    student.GroupID = group_id
-                                else:
-                                    return False, f"Групу з ID {group_id} не знайдено"
-                            except ValueError:
-                                return False, "Такої групи не існує"
-                    else:
-                        return False, "Цей користувач не є студентом"
-                else:
-                    return False, f"Невідоме поле: {field}"
-
-                self.session.commit()
-                return True, "Поле успішно оновлено"
-            except SQLAlchemyError as e:
-                self.session.rollback()
-                return False, str(e)
+    # def update_user_field(self, telegram_tag, field, new_value):
+    #         """Оновлює вказане поле користувача."""
+    #         try:
+    #             user = self.session.query(User).filter_by(TelegramTag=telegram_tag).first()
+    #             if not user:
+    #                 return False, "Користувача не знайдено"
+    #
+    #             if field == "name":
+    #                 user.UserName = new_value
+    #             elif field == "phone":
+    #                 user.PhoneNumber = new_value
+    #             elif field == "year":
+    #                 student = self.session.query(Student).filter_by(UserID=user.UserID).first()
+    #                 if student:
+    #                     try:
+    #                         year = int(new_value)
+    #                         student.AdmissionYear = year
+    #                     except ValueError:
+    #                         return False, "Рік вступу повинен бути числом"
+    #                 else:
+    #                     return False, "Цей користувач не є студентом"
+    #             elif field == "group":
+    #                 student = self.session.query(Student).filter_by(UserID=user.UserID).first()
+    #                 if student:
+    #                     # Спочатку перевіряємо, чи існує група з таким ім'ям
+    #                     group = self.session.query(StudentGroup).filter_by(GroupName=new_value).first()
+    #                     if group:
+    #                         student.GroupID = group.GroupID
+    #                     else:
+    #                         # Якщо введено ID групи замість назви
+    #                         try:
+    #                             group_id = int(new_value)
+    #                             group = self.session.query(StudentGroup).filter_by(GroupID=group_id).first()
+    #                             if group:
+    #                                 student.GroupID = group_id
+    #                             else:
+    #                                 return False, f"Групу з ID {group_id} не знайдено"
+    #                         except ValueError:
+    #                             return False, "Такої групи не існує"
+    #                 else:
+    #                     return False, "Цей користувач не є студентом"
+    #             else:
+    #                 return False, f"Невідоме поле: {field}"
+    #
+    #             self.session.commit()
+    #             return True, "Поле успішно оновлено"
+    #         except SQLAlchemyError as e:
+    #             self.session.rollback()
+    #             return False, str(e)
 
     # def get_student_info(self, user_id):
     #         """Отримує інформацію про студента."""
@@ -269,16 +269,16 @@ class AuthRepository(BaseRepository):
     #             }
     #         return None
 
-    def get_unconfirmed_users(self, role=None):
-                """Отримує список непідтверджених користувачів з можливістю фільтрації за роллю."""
-
-                query = self.session.query(User).filter(User.IsConfirmed == False)
-
-                if role:
-                    query = query.filter(User.Role == role)
-
-                users = query.all()
-                return users
+    # def get_unconfirmed_users(self, role=None):
+    #             """Отримує список непідтверджених користувачів з можливістю фільтрації за роллю."""
+    #
+    #             query = self.session.query(User).filter(User.IsConfirmed == False)
+    #
+    #             if role:
+    #                 query = query.filter(User.Role == role)
+    #
+    #             users = query.all()
+    #             return users
 
     # def get_unconfirmed_students_with_details(self):
     #         """Отримує список непідтверджених студентів з детальною інформацією."""

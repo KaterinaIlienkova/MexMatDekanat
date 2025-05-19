@@ -29,15 +29,14 @@ class FAQController(BaseController):
         super().__init__(application)
         self.faq_service = faq_service
 
-        # Реєстрація обробників
-        self.register_handlers()
-
     def register_handlers(self):
         """Реєструє всі обробники FAQ в додатку"""
-        self.application.add_handler(CallbackQueryHandler(self.edit_qa_handler, pattern="^edit_question$|^add_question$|^delete_question$"))
-        self.application.add_handler(CallbackQueryHandler(self.delete_faq_handler, pattern="^delete_faq_|^cancel_delete$"))
-        self.application.add_handler(CallbackQueryHandler(self.edit_faq_callback_handler, pattern="^edit_faq_|^cancel_edit$"))
-        self.application.add_handler(CallbackQueryHandler(self.faq_response, pattern="^faq_"))
+        return [
+            CallbackQueryHandler(self.edit_qa_handler, pattern="^edit_question$|^add_question$|^delete_question$"),
+            CallbackQueryHandler(self.delete_faq_handler, pattern="^delete_faq_|^cancel_delete$"),
+            CallbackQueryHandler(self.edit_faq_callback_handler, pattern="^edit_faq_|^cancel_edit$"),
+            CallbackQueryHandler(self.faq_response, pattern="^faq_")
+        ]
 
     async def show_edit_qa_options(self, update: Update, context: CallbackContext):
         """Показує опції редагування Q&A."""

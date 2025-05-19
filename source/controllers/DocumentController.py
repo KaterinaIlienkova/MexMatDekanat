@@ -12,14 +12,15 @@ class DocumentController(BaseController):
         self.WAITING_FOR_SCAN_LINK = 1
 
     def register_handlers(self):
-        """Реєстрація обробників callback-ів."""
-        self.application.add_handler(CallbackQueryHandler(self.select_document, pattern="^doc_select_"))
-        self.application.add_handler(CallbackQueryHandler(self.confirm_document_request, pattern="^doc_confirm_"))
-        self.application.add_handler(CallbackQueryHandler(self.cancel_document_request, pattern="^cancel_doc$"))
-        self.application.add_handler(CallbackQueryHandler(self.handle_document_request, pattern="^handle_request_"))
-        self.application.add_handler(CallbackQueryHandler(self.process_document_request, pattern="^process_doc_"))
-        self.application.add_handler(CallbackQueryHandler(self.reject_document_request, pattern="^reject_doc_"))
-
+        """Повертає список обробників для реєстрації."""
+        return [
+            CallbackQueryHandler(self.select_document, pattern="^doc_select_"),
+            CallbackQueryHandler(self.confirm_document_request, pattern="^doc_confirm_"),
+            CallbackQueryHandler(self.cancel_document_request, pattern="^cancel_doc$"),
+            CallbackQueryHandler(self.handle_document_request, pattern="^handle_request_"),
+            CallbackQueryHandler(self.process_document_request, pattern="^process_doc_"),
+            CallbackQueryHandler(self.reject_document_request, pattern="^reject_doc_")
+        ]
     async def request_document(self, update: Update, context: CallbackContext):
         """Ініціює процес замовлення документу."""
         can_request, result = self.document_service.can_request_document(update.effective_chat.id)

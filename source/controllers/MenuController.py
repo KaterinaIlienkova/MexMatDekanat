@@ -5,9 +5,9 @@ from source.controllers.BaseController import BaseController
 import logging
 
 logger = logging.getLogger(__name__)
-
 class MenuController(BaseController):
-    def __init__(self, application,document_controller,faq_controller,course_controller,auth_controller,announcement_controller, pqa_controller ):
+    def __init__(self, application, document_controller, faq_controller, course_controller,
+                 auth_controller, announcement_controller, pqa_controller):
         super().__init__(application)
         self.button_handlers = {}
         self.document_controller = document_controller
@@ -35,10 +35,13 @@ class MenuController(BaseController):
         }
 
         self.application.add_handler(CommandHandler("start", self.start))
-        # Register document controller handlers first
-        self.document_controller.register_handlers()
 
-        # Register announcement controller handlers
+        for handler in self.document_controller.register_handlers():
+            self.application.add_handler(handler)
+
+        for handler in self.faq_controller.register_handlers():
+            self.application.add_handler(handler)
+
         for handler in self.announcement_controller.register_handlers():
             self.application.add_handler(handler)
 
@@ -48,12 +51,8 @@ class MenuController(BaseController):
         for handler in self.auth_controller.register_handlers():
             self.application.add_handler(handler)
 
-        course_handlers = self.course_controller.register_handlers()
-        for handler in course_handlers:
+        for handler in self.course_controller.register_handlers():
             self.application.add_handler(handler)
-
-
-        # Then register menu handlers
 
         self.application.add_handler(
             MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_message)
@@ -86,7 +85,7 @@ class MenuController(BaseController):
                 [KeyboardButton("Персональні питання студентів")]
             ],
             "student": [
-                [KeyboardButton("Q&A"),KeyboardButton("Поставити питання")],
+                [KeyboardButton("Q&A"), KeyboardButton("Поставити питання")],
                 [KeyboardButton("Мої поточні курси")],
                 [KeyboardButton("Замовити документ")]
             ],
@@ -96,7 +95,6 @@ class MenuController(BaseController):
             ],
         }
         return keyboards.get(role, [])
-
 
     async def handle_message(self, update: Update, context: CallbackContext):
         # Handle FAQ text inputs
@@ -108,7 +106,7 @@ class MenuController(BaseController):
             await self.document_controller.receive_scan_link(update, context)
             return
 
-            # Перевіряємо, чи обробляємо зараз створення курсу
+        # Перевіряємо, чи обробляємо зараз створення курсу
         if context.user_data.get("state", "").startswith("waiting_for_"):
             # Делегуємо обробку CourseController, якщо в процесі створення курсу
             await self.course_controller.handle_course_creation_input(update, context)
@@ -122,4 +120,3 @@ class MenuController(BaseController):
             await handler(update, context)
         else:
             await update.message.reply_text("Невідома команда.")
-
