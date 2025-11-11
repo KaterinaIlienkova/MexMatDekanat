@@ -1,3 +1,4 @@
+BACHELOR`S DEGREE THESIS PROJECT 
 🚀 The Future of Campus Communication in Ukraine: Why Your University Needs a Telegram Bot
 In the age of remote education, a central hub for essential organizational information isn't just nice to have—it's absolutely critical. We have an urgent need for a fast, accessible, and user-friendly communication channel connecting students, faculty, and administrative staff.
 
